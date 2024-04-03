@@ -1,6 +1,12 @@
-cmake_minimum_required(VERSION 3.27)
-project(ParticleSim_Server)
+﻿# CMakeList.txt : Top-level CMake project file, do global configuration
+# and include sub-projects here.
+#
 
-set(CMAKE_CXX_STANDARD 17)
+project("ParticleSim-Server")
 
-add_executable(ParticleSim_Server main.cpp)
+add_subdirectory("ParticleSim-Server")
+cmake_minimum_required (VERSION 3.8)
+find_package(OpenGL REQUIRED)
+
+
+
