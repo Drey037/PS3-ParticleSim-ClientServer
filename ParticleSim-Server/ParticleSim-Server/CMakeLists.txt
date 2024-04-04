@@ -6,7 +6,7 @@ find_package(OpenGL REQUIRED)
 
 
 # Add source to this project's executable.
-add_executable (ParticleSim-Server "ParticleSim-Server.cpp" "glad.c" "Particle.h" "Ghost.h")
+add_executable (ParticleSim-Server "ParticleSim-Server.cpp" "glad.c" "Particle.h" "Ghost.h" "ParticleBatch.cpp" "Particle.cpp")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	${PROJECT_SOURCE_DIR}/ParticleSim-Server/imgui
@@ -16,6 +16,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     OpenGL::GL 
     ${PROJECT_SOURCE_DIR}/ParticleSim-Server/Libraries/lib/glfw3.lib
+    ws2_32
 )
 
 target_sources(${PROJECT_NAME} PRIVATE 
