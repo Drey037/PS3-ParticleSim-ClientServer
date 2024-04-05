@@ -362,5 +362,5 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# Ignore all class files in src folder and its subdirectories
-src/**/*.class
+# Ignore all class files in ParticleSim-Client folder and its subdirectories
+ParticleSim-Client/**/*.class
