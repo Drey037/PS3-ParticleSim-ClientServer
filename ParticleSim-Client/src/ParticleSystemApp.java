@@ -1,6 +1,8 @@
 import javax.imageio.*;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.io.*;
 import java.net.Socket;
 import java.net.URL;
@@ -26,12 +28,13 @@ public class ParticleSystemApp extends JFrame {
     private HashMap<Integer, ParticleBatch> particleBatchMap;
     private ArrayList<ParticleBatch> particleBatchList;
 
-    private Image texture_left, texture_right;
+    private Image texture_left;
+    private Image texture_right;
 
     private static Socket socket;
 
-    private static ObjectOutputStream out;
-    private static BufferedReader in;
+    private ObjectOutputStream out;
+    private BufferedReader in;
     public ParticleSystemApp() {
         // Window Initialization
         setTitle("Particle Simulation Client");
@@ -40,15 +43,6 @@ public class ParticleSystemApp extends JFrame {
         setLayout(new BorderLayout());
         setResizable(false);
         getContentPane().setBackground(Color.GRAY); // Set the default window color
-
-        particleBatchMap = new HashMap<>();
-        Buddies = new ArrayList<>();
-
-        //Initializing the batch list
-        particleBatchList = new ArrayList<ParticleBatch>();
-        ParticleBatch tempPb = new ParticleBatch(0);
-        tempPb.start();
-        particleBatchList.add(tempPb);
 
         try {
             URL imageUrl_left = getClass().getResource("/ghost_left.png");
@@ -60,6 +54,14 @@ public class ParticleSystemApp extends JFrame {
             e.printStackTrace();
         }
 
+        character = new Ghost(1,1, texture_left, texture_right);
+
+        particleBatchMap = new HashMap<>();
+        Buddies = new ArrayList<>();
+
+        //Initializing the batch list
+        particleBatchList = new ArrayList<ParticleBatch>();
+
         Thread t1 = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -68,14 +70,6 @@ public class ParticleSystemApp extends JFrame {
         });
         t1.start();
 
-        character = new Ghost(1,1,texture_left, texture_right);
-        Thread t2 = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                sendThread();
-            }
-        });
-        t2.start();
 
         // Particle System Panel
         particlePanel = new ParticlePanel(particleBatchList, character, Buddies);
@@ -84,7 +78,40 @@ public class ParticleSystemApp extends JFrame {
         pack(); // Adjusts the frame size to fit the preferred size of its components
         setLocationRelativeTo(null); // Centers the frame on the screen
 
-        particlePanel.requestFocus();
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                int dx = 0, dy = 0;
+
+                switch (e.getKeyCode()) {
+                    case KeyEvent.VK_W:
+                    case KeyEvent.VK_UP:
+                        dy = 1;
+                        //System.out.println("UP");
+                        break;
+                    case KeyEvent.VK_S:
+                    case KeyEvent.VK_DOWN:
+                        dy = -1;
+                        //System.out.println("RIGHT");
+                        break;
+                    case KeyEvent.VK_A:
+                    case KeyEvent.VK_LEFT:
+                        dx = -1;
+                        character.turnChar(true);
+                        //System.out.println("LEFT");
+                        break;
+                    case KeyEvent.VK_D:
+                    case KeyEvent.VK_RIGHT:
+                        dx = 1;
+                        character.turnChar(false);
+                        //System.out.println("DOWN");
+                        break;
+                }
+                character.move(dx, dy);
+                sendThread();
+                particlePanel.repaint(); // Redraw the panel to reflect the character's new position
+            }
+        });
         // Start gamelogic thread
         new Thread(this::gameLoop).start();
     }
@@ -182,24 +209,31 @@ public class ParticleSystemApp extends JFrame {
 
                 JSONArray jsonArray = new JSONArray(serializedCoordinates);
                 // Get the type of message
-                int type = 0;
+                int type = -1;
 
                 // Decode the received json
                 for (int i = 0; i < jsonArray.length(); i++) {
                     JSONObject jsonObject = jsonArray.getJSONObject(i);
+                    System.out.println(jsonObject.toString());
 
                     if (i == 0) {
                         type = jsonObject.getInt("Type");
                     }
                     else {
                         switch(type) {
+                            case 0: // Welcome
+                                int self_id = jsonObject.getInt("ID");
+                                character.setID(self_id);
+                                System.out.println(character.getId());
+
+                                break;
                             case 1: // Received buddy client coordinates
                                 int clientX = jsonObject.getInt("X");
                                 int clientY = jsonObject.getInt("Y");
-                                String id = jsonObject.getString("ID");
+                                int id = jsonObject.getInt("ClientID");
 
                                 for (Ghost buddy: Buddies) {
-                                    if (buddy.getId().equals(id))
+                                    if (buddy.getId() == id)
                                         buddy.updatePos(clientX, clientY);
                                 }
                                 break;
@@ -211,18 +245,34 @@ public class ParticleSystemApp extends JFrame {
                                 int theta = jsonObject.getInt("Theta");
                                 int velocity = jsonObject.getInt("Velocity");
 
-                                particleBatchMap.computeIfAbsent(batchId, k -> new ParticleBatch(batchId)).addParticle(new Particle(x, y, (double) theta, (double) velocity));
+                                if (particleBatchMap.containsKey(batchId)) {
+                                    ParticleBatch batch = particleBatchMap.get(batchId);
+                                    batch.addParticle(new Particle(x, y, (double) theta, (double) velocity));
+                                }
+                                else {
+                                    ParticleBatch newBatch = new ParticleBatch(batchId);
+                                    newBatch.addParticle(new Particle(x, y, (double) theta, (double) velocity));
+                                    particleBatchMap.put(batchId, newBatch);
+                                    particleBatchList.add(newBatch);
+                                }
                                 break;
 
                             case 3: // Buddy got deleted :(
-                                String delete_id = jsonObject.getString("ID");
-                                Buddies.removeIf(obj -> obj.getId().equals(delete_id));
+                                int delete_id = jsonObject.getInt("ClientID");
+                                Buddies.removeIf(obj -> obj.is(delete_id));
                                 break;
 
                             default: // Error type
                                 System.out.println("Error Type");
                                 break;
                         }
+                    }
+                }
+
+                if (type == 2) {
+                    System.out.println("List of batches");
+                    for (ParticleBatch batch: particleBatchList) {
+                        System.out.format("%d has %d particles\n", batch.getId(), batch.getNumParticles());
                     }
                 }
 
@@ -243,31 +293,24 @@ public class ParticleSystemApp extends JFrame {
     }
 
     public void sendThread() {
-        while (true) {
-            try {
-                PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+        try {
+            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.put("ClientID", character.getId());
-                jsonObject.put("X", character.getX());
-                jsonObject.put("Y", character.getY());
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put("ClientID", character.getId());
+            jsonObject.put("X", character.getX());
+            jsonObject.put("Y", character.getY());
 
-                String jsonString = jsonObject.toString();
-
-                out.println(jsonString);
-                // running = false; // Uncomment to break the loop based on a condition
-            } catch (IOException e) {
-                e.printStackTrace(); // Or handle the exception as needed
-                break;
-                // Handle the exception as needed, possibly by breaking out of the loop
-            } catch (JSONException e) {
-                e.printStackTrace(); // Or handle the exception as needed
-                // Handle the exception as needed
-                break;
-            }
+            String jsonString = jsonObject.toString();
+            out.println(jsonString);
+            // running = false; // Uncomment to break the loop based on a condition
+        } catch (IOException e) {
+            e.printStackTrace(); // Or handle the exception as needed
+            // Handle the exception as needed, possibly by breaking out of the loop
+        } catch (JSONException e) {
+            e.printStackTrace(); // Or handle the exception as needed
+            // Handle the exception as needed
         }
-
-        System.out.println("Broke out of the loop");
     }
 
 

@@ -27,6 +27,8 @@ public:
     void update(double deltaTime);
     int getX() const;
     int getY() const;
+    double getTheta() const;
+    double getVelocity() const;
     int getSize() const;
     double degreesToRadians(double degrees); // Function declaration
 };

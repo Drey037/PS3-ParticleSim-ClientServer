@@ -9,9 +9,10 @@
 #include "Particle.h"
 #include "ParticleBatch.h"
 
-ParticleBatch::ParticleBatch() : numParticles(0) {
+ParticleBatch::ParticleBatch() : numParticles(0), batchID(++currentID)  {
     // Start the update thread
     std::cout << "CREATED";
+    
 }
 
 std::vector<Particle>& ParticleBatch::getParticles() {
@@ -34,6 +35,10 @@ void ParticleBatch::addNewParticles(const std::vector<Particle>& newParticles, i
 void ParticleBatch::clearParticles() {
     particles.clear();
     numParticles = 0;
+}
+
+int ParticleBatch::getID() {
+    return batchID;
 }
 
 void ParticleBatch::updateParticles(double timeStep) {

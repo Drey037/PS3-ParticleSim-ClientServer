@@ -11,7 +11,7 @@ FetchContent_MakeAvailable(json)
 
 
 # Add source to this project's executable.
-add_executable (ParticleSim-Server "ParticleSim-Server.cpp" "glad.c" "Particle.h" "Ghost.h" "ParticleBatch.cpp" "Particle.cpp")
+add_executable (ParticleSim-Server "ParticleSim-Server.cpp" "glad.c" "Particle.h" "Ghost.h" "ParticleBatch.cpp" "Particle.cpp" "Ghost.cpp")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	${PROJECT_SOURCE_DIR}/ParticleSim-Server/imgui
@@ -37,3 +37,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 )
 message(${PROJECT_SOURCE_DIR}/ParticleSim-Server/include)
 # TODO: Add tests and install targets if needed.
+
+
+set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ignore:4099")

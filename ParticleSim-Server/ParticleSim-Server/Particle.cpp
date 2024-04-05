@@ -40,6 +40,14 @@ int Particle::getSize() const {
     return size;
 }
 
+double Particle::getTheta() const{
+    return theta;
+}
+
+double Particle::getVelocity() const{
+    return velocity;
+}
+
 double Particle::degreesToRadians(double degrees) {
     return degrees * PI / 180.0;
 }

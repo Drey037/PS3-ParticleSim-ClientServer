@@ -26,7 +26,7 @@ using json = nlohmann::json;
 
 #include "Particle.h"
 #include "ParticleBatch.h"
-// #include "Ghost.h"
+#include "Ghost.h"
 
 using namespace std;
 
@@ -36,7 +36,7 @@ ImVec4 particleColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 std::vector<std::unique_ptr<ParticleBatch>> particleBatchList;
 std::mutex particleListLock;
-std::vector<SOCKET> clientSockets;
+std::vector<Ghost> clients;
 SOCKET serverSocket;
 const int MAX_LOAD = 100; // Assuming MAX_LOAD is a constant
 
@@ -45,6 +45,8 @@ const double MAX_VELOCITY = 50.0; // Define your maximum velocity here
 const int PANEL_WIDTH = 1280; // Define your maximum velocity here
 const int PANEL_HEIGHT = 720; // Define your maximum velocity here
 int numClients;
+int ParticleBatch::currentID = 0;
+int Ghost::currentID = 0;
 
 // Function to initialize ImGui
 void InitImGui(GLFWwindow* window) {
@@ -57,24 +59,181 @@ void InitImGui(GLFWwindow* window) {
 }
 
 
-void ShowMessagePopup(const char* title, const char* message) {
-    // Open the modal window
-    ImGui::OpenPopup(title);
+// -------------------------------------- SERVER STUFF -------------------------------------------------
 
-    // Create the modal window
-    if (ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("%s", message);
 
-        // Provide a button to close the modal window
-        if (ImGui::Button("OK")) {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
+// This function is used to turn Coordinates into JSON
+std::string serializeParticles(const std::vector <Particle>& particles, int batchID) {
+    json j;
+    j.push_back({ {"Type", 2} });
+    for (const auto& particle : particles) {
+        j.push_back({ {"BatchID", batchID}, {"X", particle.getX()}, {"Y", particle.getY()}, {"Theta", particle.getTheta()} , {"Velocity", particle.getVelocity()} });
     }
+    std::string serializedJson = j.dump();
+    serializedJson += '\n'; // Add newline character at the end
+    return serializedJson;
 }
 
 
+
+ //This function is used to turn the json into string to be sent
+void sendCoordinates(const std::string& serializedCoordinates) {
+    cout << "Sent coordinates";
+    const char* data = serializedCoordinates.c_str();
+    size_t dataLength = serializedCoordinates.size();
+
+    for (Ghost client: clients) {
+        SOCKET clientSocket = client.getSocket();
+        int bytesSent = send(clientSocket, data, dataLength, 0);
+        if (bytesSent == SOCKET_ERROR) {
+            std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
+            closesocket(serverSocket);
+            WSACleanup();
+        }
+    }
+}
+
+// SERVER LISTEN FOR CLIENTS
+void listenForClients(SOCKET serverSocket) {
+    while (true) {
+        sockaddr_in clientAddr;
+        int clientAddrSize = sizeof(clientAddr);
+        SOCKET clientSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrSize);
+        if (clientSocket != INVALID_SOCKET) {
+            std::cout << "Client connected\n";
+            clients.push_back(Ghost(1, 1, clientSocket));
+
+            Ghost trial = clients.back();
+            if (trial.getSocket() == INVALID_SOCKET) {
+                throw std::runtime_error("Socket is not initialized");
+            }
+
+            // Send a welcome
+            json j;
+            j.push_back({ {"Type", 0} });
+            j.push_back({ {"ID", Ghost::currentID} });
+            std::string serializedJson = j.dump();
+            serializedJson += '\n'; // Add newline character at the end
+
+            const char* data = serializedJson.c_str();
+            size_t dataLength = serializedJson.size();
+
+            int bytesSent = send(clientSocket, data, dataLength, 0);
+            if (bytesSent == SOCKET_ERROR) {
+                std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
+                closesocket(serverSocket);
+                WSACleanup();
+            }
+            std::cout << "Sent welcome !\n";
+        }
+    }
+}
+
+void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
+    json j;
+    j.push_back({ {"Type", 1} });
+    j.push_back({ {"X", newX},{"Y", newY} });
+    std::string serializedJson = j.dump();
+    serializedJson += '\n'; // Add newline character at the end
+
+    const char* data = serializedJson.c_str();
+    size_t dataLength = serializedJson.size();
+
+    for (auto& client : clients) {
+        if (client.getID() != excludeClientID) {
+            // Send the message to the client
+            send(client.getSocket(), data, dataLength, 0);
+        }
+    }
+}
+
+// Function to handle receiving messages from clients
+void receiveMessages() {
+    while (true) {
+        for (auto& client : clients) {
+            char buffer[1024];
+            int bytesReceived = recv(client.getSocket(), buffer, sizeof(buffer), 0);
+            cout << "Here\n";
+            if (bytesReceived > 0) {
+                // Ensure the buffer is null-terminated
+                buffer[bytesReceived] = '\0';
+                std::string jsonString(buffer);
+                try {
+                    json res = json::parse(jsonString);
+                    cout << res << "\n";
+                    // Assuming the JSON contains "ClientID" as a string, and "X" and "Y" as integers
+                    int clientID = res["ClientID"];
+                    int x = res["X"];
+                    int y = res["Y"];
+
+                    // Process the parsed values as needed
+                    // For example, print them out
+                    std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
+                    sendNewPositionsToAllExcept(clientID, x, y);
+                }
+                catch (json::parse_error& e) {
+                    std::cerr << "JSON parse error: " << e.what() << std::endl;
+                }
+                catch (json::type_error& e) {
+                    std::cerr << "JSON type error: " << e.what() << std::endl;
+                }
+            }
+            else if (bytesReceived == 0) {
+                // Handle the case where the connection is closed
+                std::cout << "Connection closed" << std::endl;
+                break; // Exit the loop if the connection is closed
+            }
+            else {
+                // Handle other errors
+                std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
+            }
+        }
+    }
+}
+
+int serverStart() {
+    // Initialize Winsock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "Error: WSAStartup failed\n";
+        return 1;
+    }
+
+    // Create a socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Error: Socket creation failed\n";
+        WSACleanup();
+        return 1;
+    }
+
+    // Set up the server address
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(12345); // Port number of the server
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY); // Listen on all interfaces
+
+    // Bind the socket to the server address
+    if (::bind(serverSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cerr << "Error: Bind failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // Listen for incoming connections
+    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+        std::cerr << "Error: Listen failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Server is listening on port 12345\n";
+
+    return 0;
+}
+// ---------------------------END SERVER STUFF ----------------------------------------
 // ----------------------ADDING PARTICLES---------------------------------------------
 struct ParticleBatchComparator {
     bool operator()(const std::unique_ptr<ParticleBatch>& batch1Ptr, const std::unique_ptr<ParticleBatch>& batch2Ptr) const {
@@ -124,6 +283,8 @@ void addParticlesDiffPoints(int n, int startX, int endX, int startY, int endY, d
                 currentY += increment * unitVectorY;
             }
 
+            sendCoordinates(serializeParticles(pList, batchDef.getID()));
+
             // Assuming particleListLock is a std::mutex
             std::lock_guard<std::mutex> lock(particleListLock);
             batchDef.addNewParticles(pList, numNeeded);
@@ -155,6 +316,7 @@ void addParticlesDiffPoints(int n, int startX, int endX, int startY, int endY, d
 
         lastParticleBatch.clearParticles();
         lastParticleBatch.addNewParticles(xList, added);
+        sendCoordinates(serializeParticles(xList, lastParticleBatch.getID()));
     }
     std::sort(particleBatchList.begin(), particleBatchList.end(), ParticleBatchComparator());
 }
@@ -188,6 +350,8 @@ void addParticlesDiffAngles(int n, int x, int y, double startTheta, double endTh
                 incTheta += dTheta;
             }
 
+            sendCoordinates(serializeParticles(pList, batchDef.getID()));
+
             // Assuming particleListLock is a std::mutex
             std::lock_guard<std::mutex> lock(particleListLock);
             batchDef.addNewParticles(pList, numNeeded);
@@ -218,6 +382,7 @@ void addParticlesDiffAngles(int n, int x, int y, double startTheta, double endTh
 
         lastParticleBatch.clearParticles();
         lastParticleBatch.addNewParticles(xList, added);
+        sendCoordinates(serializeParticles(xList, lastParticleBatch.getID()));
     }
     std::sort(particleBatchList.begin(), particleBatchList.end(), ParticleBatchComparator());
 }
@@ -249,6 +414,8 @@ void addParticlesDiffVelocities(int n, int x, int y, double theta, double startV
                 pList.push_back(Particle(x, y, incVelo, theta));
                 incVelo += dVelocity;
             }
+
+
 
             // Assuming particleListLock is a std::mutex
             std::lock_guard<std::mutex> lock(particleListLock);
@@ -373,11 +540,9 @@ void RenderImGui(double currentFramerate) {
 
                 // Check if coordinates are within the window bounds
                 if (startX_int < 0 || startX_int > PANEL_WIDTH || startY_int < 0 || startY_int > PANEL_HEIGHT ||
-                    endX_int < 0 || endX_int > PANEL_WIDTH|| endY_int < 0 || endY_int > PANEL_HEIGHT) {
+                    endX_int < 0 || endX_int > PANEL_WIDTH || endY_int < 0 || endY_int > PANEL_HEIGHT) {
 
                     std::cout << "Invalid Coordinates!";
-
-                    ShowMessagePopup("Error!", "Invalid coordinates!");
                     ImGui::End();
                     return;
                 }
@@ -386,8 +551,6 @@ void RenderImGui(double currentFramerate) {
                 if (angle_dob < 0 || angle_dob > 360) {
 
                     std::cout << "Theta must be between 0 and 360 degrees!";
-
-                    ShowMessagePopup("Error!", "Theta must be between 0 and 360 degrees!");
                     ImGui::End();
                     return;
                 }
@@ -400,8 +563,6 @@ void RenderImGui(double currentFramerate) {
                     const char* message = msg.c_str();
 
                     std::cout << msg;
-
-                    ShowMessagePopup("Error!", message);
                     ImGui::End();
                     return;
                 }
@@ -429,7 +590,7 @@ void RenderImGui(double currentFramerate) {
         if (ImGui::Button("Add Particles")) {
             // Handle button click
             std::cout << "Add Particles button clicked for different angles" << std::endl;
-            
+
             std::string n_str(n);
             std::string X_str(startX);
             std::string Y_str(startY);
@@ -450,8 +611,6 @@ void RenderImGui(double currentFramerate) {
 
                     std::cout << "Invalid Coordinates!";
 
-                    ShowMessagePopup("Error!", "Invalid coordinates!");
-
                     ImGui::End();
                     return;
                 }
@@ -460,8 +619,6 @@ void RenderImGui(double currentFramerate) {
                 if (startAngle_dob < 0 || startAngle_dob > 360 || endAngle_dob < 0 || endAngle_dob > 360) {
 
                     std::cout << "Theta must be between 0 and 360 degrees!";
-
-                    ShowMessagePopup("Error!", "Theta must be between 0 and 360 degrees!");
 
                     ImGui::End();
                     return;
@@ -475,8 +632,6 @@ void RenderImGui(double currentFramerate) {
                     const char* message = msg.c_str();
 
                     std::cout << msg;
-
-                    ShowMessagePopup("Error!", message);
 
                     ImGui::End();
                     return;
@@ -525,8 +680,6 @@ void RenderImGui(double currentFramerate) {
                 if (X_int < 0 || X_int > PANEL_WIDTH || Y_int < 0 || Y_int > PANEL_HEIGHT) {
                     std::cout << "Invalid Coordinates!";
 
-                    ShowMessagePopup("Error!", "Invalid coordinates!");
-
                     ImGui::End();
                     return;
                 }
@@ -535,7 +688,6 @@ void RenderImGui(double currentFramerate) {
                 if (angle_dob < 0 || angle_dob > 360) {
                     std::cout << "Theta must be between 0 and 360 degrees!";
 
-                    ShowMessagePopup("Error!", "Theta must be between 0 and 360 degrees!");
 
                     ImGui::End();
                     return;
@@ -549,8 +701,6 @@ void RenderImGui(double currentFramerate) {
                     const char* message = msg.c_str();
 
                     std::cout << msg;
-
-                    ShowMessagePopup("Error!", message);
 
                     ImGui::End();
                     return;
@@ -573,143 +723,12 @@ void RenderImGui(double currentFramerate) {
     ImGui::End();
 }
 
-// -------------------------------------- SERVER STUFF -------------------------------------------------
-
-
-// This function is used to turn Coordinates into JSON
-std::string serializeCoordinates(const std::vector<std::pair<int, int>>& coordinates) {
-    json j;
-    j.push_back({ {"Type", 2} });
-    for (const auto& coord : coordinates) {
-        j.push_back({ {"x", coord.first}, {"y", coord.second} });
-    }
-    std::string serializedJson = j.dump();
-    serializedJson += '\n'; // Add newline character at the end
-    return serializedJson;
-}
-
-// This function is used to turn the json into string to be sent
-void sendCoordinates(const std::string& serializedCoordinates) {
-    cout << "Sent coordinates";
-    const char* data = serializedCoordinates.c_str();
-    size_t dataLength = serializedCoordinates.size();
-
-    for (SOCKET clientSocket : clientSockets) {
-        int bytesSent = send(clientSocket, data, dataLength, 0);
-        if (bytesSent == SOCKET_ERROR) {
-            std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
-            closesocket(serverSocket);
-            WSACleanup();
-        }
-    }
-}
-
-// SERVER LISTEN FOR CLIENTS
-void listenForClients(SOCKET serverSocket) {
-    while (true) {
-        sockaddr_in clientAddr;
-        int clientAddrSize = sizeof(clientAddr);
-        SOCKET clientSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrSize);
-        if (clientSocket != INVALID_SOCKET) {
-            std::cout << "Client connected\n";
-            clientSockets.push_back(clientSocket);
-        }
-    }
-}
-
-// Function to handle receiving messages from clients
-void receiveMessages(const std::vector<SOCKET>& clientSockets){
-    while (true) {
-        /*char buffer[1024];
-        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-        std::string jsonString(buffer);
-        json res = json::parse(jsonString);
-        res["name"] << std::endl;
-        res["age"] << std::endl;
-        res["city"];*/
-    }
-}
-
-// Function to handle sending messages to clients
-void sendMessages(const std::vector<SOCKET>& clientSockets) {
-    while (true) {
-        // Example: Sending a message to all clients
-        /*for (SOCKET clientSocket : clientSockets) {
-            send(clientSocket, message.c_str(), message.size(), 0);
-        }*/
-        // Sleep for a while to avoid sending too frequently
-
-        //Example only to delete after
-        std::vector<std::pair<int, int>> coordinates;
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> disX(0, 100); // X coordinates in the range 0 to 100
-        std::uniform_int_distribution<> disY(0, 100); // Y coordinates in the range 0 to 100
-
-        for (int i = 0; i < 30; ++i) {
-            int x = disX(gen);
-            int y = disY(gen);
-            coordinates.emplace_back(x, y);
-        }
-
-        std::string serializedCoordinates = serializeCoordinates(coordinates);
-        sendCoordinates(serializedCoordinates);
-
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-    }
-}
-
-int serverStart() {
-    // Initialize Winsock
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "Error: WSAStartup failed\n";
-        return 1;
-    }
-
-    // Create a socket
-    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (serverSocket == INVALID_SOCKET) {
-        std::cerr << "Error: Socket creation failed\n";
-        WSACleanup();
-        return 1;
-    }
-
-    // Set up the server address
-    sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(12345); // Port number of the server
-    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY); // Listen on all interfaces
-
-    // Bind the socket to the server address
-    if (::bind(serverSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
-        std::cerr << "Error: Bind failed\n";
-        closesocket(serverSocket);
-        WSACleanup();
-        return 1;
-    }
-
-    // Listen for incoming connections
-    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
-        std::cerr << "Error: Listen failed\n";
-        closesocket(serverSocket);
-        WSACleanup();
-        return 1;
-    }
-
-    std::cout << "Server is listening on port 12345\n";
-
-    return 0;
-}
-// ---------------------------END SERVER STUFF ----------------------------------------
-
 int main() {
     serverStart();
 
     // Create threads for listening, receiving, and sending
-    std::thread listenThread(listenForClients, serverSocket);
-    std::thread receiveThread(receiveMessages, std::ref(clientSockets));
-    std::thread sendThread(sendMessages, std::ref(clientSockets));
+    thread listenThread(listenForClients, serverSocket);
+    thread receiveThread(receiveMessages);
 
     // FPS Stuff
     double frameTime = 0.0; // Time since the last frame
@@ -784,7 +803,7 @@ int main() {
                     batchDef.updateParticles(timeStep);
                     }));
             }
-            
+
             futures.push_back(std::async(std::launch::async, DrawElements));
 
             for (auto& future : futures) {
@@ -801,7 +820,7 @@ int main() {
             currentFramerate = 1.0 / frameTime;
             lastFPSUpdateTime = currentTime;
         }
-  
+
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -814,7 +833,6 @@ int main() {
     // Wait for threads to finish (this will never happen in this example, but it's here for completeness)
     listenThread.join();
     receiveThread.join();
-    sendThread.join();
 
     // Close the server socket when done
     closesocket(serverSocket);

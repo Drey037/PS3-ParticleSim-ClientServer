@@ -13,18 +13,21 @@ private:
     std::vector<Particle> particles;
     std::mutex particleListLock;
     int numParticles;
+    int batchID;
     static const int MAX_LOAD = 20;
     std::thread updateThread; // Thread for running the update loop
+    
 
 public:
     ParticleBatch();
-
+    static int currentID;
     std::vector<Particle>& getParticles();
     int getNumParticles() const;
     bool isFull() const;
     void addNewParticles(const std::vector<Particle>& newParticles, int newN);
     void clearParticles();
     void updateParticles(double timeStep);
+    int getID();
 
     //Delete copy constructor
     ParticleBatch(const ParticleBatch&) = delete;

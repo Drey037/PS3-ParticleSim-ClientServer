@@ -46,40 +46,6 @@ public class ParticlePanel extends JPanel {
         this.character = character;
         this.Buddies = Buddies;
 
-
-        addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                int dx = 0, dy = 0;
-
-                switch (e.getKeyCode()) {
-                    case KeyEvent.VK_W:
-                    case KeyEvent.VK_UP:
-                        dy = 1;
-                        //System.out.println("UP");
-                        break;
-                    case KeyEvent.VK_S:
-                    case KeyEvent.VK_DOWN:
-                        dy = -1;
-                        //System.out.println("RIGHT");
-                        break;
-                    case KeyEvent.VK_A:
-                    case KeyEvent.VK_LEFT:
-                        dx = -1;
-                        character.turnChar(true);
-                        //System.out.println("LEFT");
-                        break;
-                    case KeyEvent.VK_D:
-                    case KeyEvent.VK_RIGHT:
-                        dx = 1;
-                        character.turnChar(false);
-                        //System.out.println("DOWN");
-                        break;
-                }
-                character.move(dx, dy);
-                repaint(); // Redraw the panel to reflect the character's new position
-            }
-        });
     }
     private int translateX(int cameraX) {
         int MapX = -1;

@@ -23,16 +23,15 @@ public class Ghost {
     private final int screenX;
     private final int screenY;
 
-    private final String id;
+    private int id;
 
     public Ghost(int x, int y, Image texture_left, Image texture_right) {
-        this.id = generateId(5);
         this.x = x;
         this.y = y;
         this.texture_left = texture_left;
         this.texture_right = texture_right;
         this.isLeft = true;
-
+        this.id = -1;
         this.screenX = WIDTH / 2 - (CHAR_MAP_WIDTH / 2);
         this.screenY = HEIGHT / 2 - (CHAR_MAP_HEIGHT / 2);
     }
@@ -75,6 +74,10 @@ public class Ghost {
         return isLeft;
     }
 
+    public void setID(int id) {
+        this.id = id;
+    }
+
     public int getScreenX() {
         return screenX;
     }
@@ -93,6 +96,10 @@ public class Ghost {
         this.y = y;
     }
 
+    public Boolean is(int id) {
+        return this.id == id;
+    }
+
     public int getX() {
         return x;
     }
@@ -101,17 +108,7 @@ public class Ghost {
         return y;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
-    }
-
-    public String generateId(int length) {
-        StringBuilder sb = new StringBuilder(length);
-        Random random = new Random();
-        for (int i = 0; i < length; i++) {
-            int randomChar = 'a' + random.nextInt('z' - 'a' + 1);
-            sb.append((char) randomChar);
-        }
-        return sb.toString();
     }
 }
