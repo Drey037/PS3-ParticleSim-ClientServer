@@ -4,6 +4,11 @@
 cmake_minimum_required (VERSION 3.8)
 find_package(OpenGL REQUIRED)
 
+include(FetchContent)
+
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
 
 # Add source to this project's executable.
 add_executable (ParticleSim-Server "ParticleSim-Server.cpp" "glad.c" "Particle.h" "Ghost.h" "ParticleBatch.cpp" "Particle.cpp")
@@ -11,12 +16,14 @@ add_executable (ParticleSim-Server "ParticleSim-Server.cpp" "glad.c" "Particle.h
 target_include_directories(${PROJECT_NAME} PRIVATE
 	${PROJECT_SOURCE_DIR}/ParticleSim-Server/imgui
 	${PROJECT_SOURCE_DIR}/ParticleSim-Server/Libraries/include
+    main PUBLIC ${nlohmann_json_SOURCE_DIR}/include
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     OpenGL::GL 
     ${PROJECT_SOURCE_DIR}/ParticleSim-Server/Libraries/lib/glfw3.lib
     ws2_32
+    nlohmann_json::nlohmann_json
 )
 
 target_sources(${PROJECT_NAME} PRIVATE 

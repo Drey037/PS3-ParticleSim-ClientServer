@@ -11,6 +11,11 @@
 #include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <nlohmann/json.hpp>
+
+
+// for convenience
+using json = nlohmann::json;
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -424,6 +429,36 @@ void RenderImGui(double currentFramerate) {
 
 // -------------------------------------- SERVER STUFF -------------------------------------------------
 
+
+// This function is used to turn Coordinates into JSON
+std::string serializeCoordinates(const std::vector<std::pair<int, int>>& coordinates) {
+    json j;
+    j.push_back({ {"Type", 2} });
+    for (const auto& coord : coordinates) {
+        j.push_back({ {"x", coord.first}, {"y", coord.second} });
+    }
+    std::string serializedJson = j.dump();
+    serializedJson += '\n'; // Add newline character at the end
+    return serializedJson;
+}
+
+// This function is used to turn the json into string to be sent
+void sendCoordinates(const std::string& serializedCoordinates) {
+    cout << "Sent coordinates";
+    const char* data = serializedCoordinates.c_str();
+    size_t dataLength = serializedCoordinates.size();
+
+    for (SOCKET clientSocket : clientSockets) {
+        int bytesSent = send(clientSocket, data, dataLength, 0);
+        if (bytesSent == SOCKET_ERROR) {
+            std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
+            closesocket(serverSocket);
+            WSACleanup();
+        }
+    }
+}
+
+// SERVER LISTEN FOR CLIENTS
 void listenForClients(SOCKET serverSocket) {
     while (true) {
         sockaddr_in clientAddr;
@@ -453,12 +488,28 @@ void receiveMessages(const std::vector<SOCKET>& clientSockets) {
 void sendMessages(const std::vector<SOCKET>& clientSockets) {
     while (true) {
         // Example: Sending a message to all clients
-        std::string message = "Hello from server!";
-        for (SOCKET clientSocket : clientSockets) {
+        /*for (SOCKET clientSocket : clientSockets) {
             send(clientSocket, message.c_str(), message.size(), 0);
-        }
+        }*/
         // Sleep for a while to avoid sending too frequently
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+
+        //Example only to delete after
+        std::vector<std::pair<int, int>> coordinates;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> disX(0, 100); // X coordinates in the range 0 to 100
+        std::uniform_int_distribution<> disY(0, 100); // Y coordinates in the range 0 to 100
+
+        for (int i = 0; i < 30; ++i) {
+            int x = disX(gen);
+            int y = disY(gen);
+            coordinates.emplace_back(x, y);
+        }
+
+        std::string serializedCoordinates = serializeCoordinates(coordinates);
+        sendCoordinates(serializedCoordinates);
+
+        std::this_thread::sleep_for(std::chrono::seconds(10));
     }
 }
 
