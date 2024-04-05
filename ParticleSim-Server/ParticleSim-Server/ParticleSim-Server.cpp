@@ -41,9 +41,10 @@ SOCKET serverSocket;
 const int MAX_LOAD = 100; // Assuming MAX_LOAD is a constant
 
 const double MIN_VELOCITY = 5.0; // Define your minimum velocity here
-const double MAX_VELOCITY = 30.0; // Define your maximum velocity here
+const double MAX_VELOCITY = 50.0; // Define your maximum velocity here
 const int PANEL_WIDTH = 1280; // Define your maximum velocity here
 const int PANEL_HEIGHT = 720; // Define your maximum velocity here
+int numClients;
 
 // Function to initialize ImGui
 void InitImGui(GLFWwindow* window) {
@@ -158,6 +159,132 @@ void addParticlesDiffPoints(int n, int startX, int endX, int startY, int endY, d
     std::sort(particleBatchList.begin(), particleBatchList.end(), ParticleBatchComparator());
 }
 
+void addParticlesDiffAngles(int n, int x, int y, double startTheta, double endTheta, double velocity) {
+    double dTheta = (endTheta - startTheta) / static_cast<double>(n);
+    double incTheta = startTheta;
+
+    int remainingCount = n;
+
+    // Assuming particleBatchList is a vector of ParticleBatch objects
+    for (auto& batch : particleBatchList) {
+
+        ParticleBatch& batchDef = *batch;
+
+        if (batchDef.isFull())
+            break;
+        else {
+            std::vector<Particle> pList;
+            int numNeeded = MAX_LOAD - batchDef.getNumParticles();
+
+            if (numNeeded > remainingCount) {
+                numNeeded = remainingCount;
+                remainingCount = 0;
+            }
+            else
+                remainingCount -= numNeeded;
+
+            for (int i = 0; i < numNeeded; i++) {
+                pList.push_back(Particle(x, y, velocity, incTheta));
+                incTheta += dTheta;
+            }
+
+            // Assuming particleListLock is a std::mutex
+            std::lock_guard<std::mutex> lock(particleListLock);
+            batchDef.addNewParticles(pList, numNeeded);
+        }
+    }
+
+    while (remainingCount > 0) {
+        std::vector<Particle> xList;
+
+        int added = 0;
+        for (int i = 0; i < MAX_LOAD; i++) {
+            if (remainingCount > 0) {
+                xList.push_back(Particle(x, y, velocity, incTheta));
+                incTheta += dTheta;
+                remainingCount--;
+
+                added = i;
+            }
+            else
+                break;
+        }
+        std::lock_guard<std::mutex> lock(particleListLock);
+        particleBatchList.emplace_back(std::make_unique<ParticleBatch>());
+
+        std::unique_ptr<ParticleBatch>& lastParticleBatchPtr = particleBatchList.back();
+
+        ParticleBatch& lastParticleBatch = *lastParticleBatchPtr;
+
+        lastParticleBatch.clearParticles();
+        lastParticleBatch.addNewParticles(xList, added);
+    }
+    std::sort(particleBatchList.begin(), particleBatchList.end(), ParticleBatchComparator());
+}
+
+void addParticlesDiffVelocities(int n, int x, int y, double theta, double startVelocity, double endVelocity) {
+    double dVelocity = (endVelocity - startVelocity) / static_cast<double>(n);
+    double incVelo = startVelocity;
+    int remainingCount = n;
+
+    // Assuming particleBatchList is a vector of ParticleBatch objects
+    for (auto& batch : particleBatchList) {
+
+        ParticleBatch& batchDef = *batch;
+
+        if (batchDef.isFull())
+            break;
+        else {
+            std::vector<Particle> pList;
+            int numNeeded = MAX_LOAD - batchDef.getNumParticles();
+
+            if (numNeeded > remainingCount) {
+                numNeeded = remainingCount;
+                remainingCount = 0;
+            }
+            else
+                remainingCount -= numNeeded;
+
+            for (int i = 0; i < numNeeded; i++) {
+                pList.push_back(Particle(x, y, incVelo, theta));
+                incVelo += dVelocity;
+            }
+
+            // Assuming particleListLock is a std::mutex
+            std::lock_guard<std::mutex> lock(particleListLock);
+            batchDef.addNewParticles(pList, numNeeded);
+        }
+    }
+
+    while (remainingCount > 0) {
+        std::vector<Particle> xList;
+
+        int added = 0;
+        for (int i = 0; i < MAX_LOAD; i++) {
+            if (remainingCount > 0) {
+                xList.push_back(Particle(x, y, incVelo, theta));
+                incVelo += dVelocity;
+                remainingCount--;
+
+                added = i;
+            }
+            else
+                break;
+        }
+        std::lock_guard<std::mutex> lock(particleListLock);
+        particleBatchList.emplace_back(std::make_unique<ParticleBatch>());
+
+        std::unique_ptr<ParticleBatch>& lastParticleBatchPtr = particleBatchList.back();
+
+        ParticleBatch& lastParticleBatch = *lastParticleBatchPtr;
+
+        lastParticleBatch.clearParticles();
+        lastParticleBatch.addNewParticles(xList, added);
+    }
+    std::sort(particleBatchList.begin(), particleBatchList.end(), ParticleBatchComparator());
+}
+
+
 // ---------------------- END ADDING PARTICLES---------------------------------------------
 
 
@@ -186,15 +313,15 @@ void RenderImGui(double currentFramerate) {
 
     // Particle Spawn Area
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(1280, 720), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(1282, 722), ImGuiCond_Always);
     ImGui::Begin("Particle Spawn Area", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
     ImGui::Text("Current FPS: %.f", currentFramerate);
     DrawElements();
     ImGui::End();
 
     // Input Panel
-    ImGui::SetNextWindowPos(ImVec2(1280, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(260, 720), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(1282, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(260, 722), ImGuiCond_Always);
     ImGui::Begin("Input Panel", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
     // Dropdown
@@ -241,8 +368,8 @@ void RenderImGui(double currentFramerate) {
                 int startY_int = std::stoi(startY_str);
                 int endX_int = std::stoi(endX_str);
                 int endY_int = std::stoi(endY_str);
-                int angle_dob = std::stod(angle_str);
-                int velocity_dob = std::stod(velocity_str);
+                double angle_dob = std::stod(angle_str);
+                double velocity_dob = std::stod(velocity_str);
 
                 // Check if coordinates are within the window bounds
                 if (startX_int < 0 || startX_int > PANEL_WIDTH || startY_int < 0 || startY_int > PANEL_HEIGHT ||
@@ -302,7 +429,8 @@ void RenderImGui(double currentFramerate) {
         if (ImGui::Button("Add Particles")) {
             // Handle button click
             std::cout << "Add Particles button clicked for different angles" << std::endl;
-
+            
+            std::string n_str(n);
             std::string X_str(startX);
             std::string Y_str(startY);
             std::string startAngle_str(startAngle);
@@ -310,14 +438,18 @@ void RenderImGui(double currentFramerate) {
             std::string velocity_str(startVelocity);
 
             try {
+                int n_int = std::stoi(n_str);
                 int X_int = std::stoi(X_str);
                 int Y_int = std::stoi(Y_str);
-                int startAngle_int = std::stoi(startAngle_str);
-                int endAngle_int = std::stoi(endAngle_str);
-                int velocity_int = std::stoi(velocity_str);
+                double startAngle_dob = std::stod(startAngle_str);
+                double endAngle_dob = std::stod(endAngle_str);
+                double velocity_dob = std::stod(velocity_str);
 
                 // Check if coordinates are within the window bounds
                 if (X_int < 0 || X_int > PANEL_WIDTH || Y_int < 0 || Y_int > PANEL_HEIGHT) {
+
+                    std::cout << "Invalid Coordinates!";
+
                     ShowMessagePopup("Error!", "Invalid coordinates!");
 
                     ImGui::End();
@@ -325,7 +457,10 @@ void RenderImGui(double currentFramerate) {
                 }
 
                 // Check if theta is within the valid range
-                if (startAngle_int < 0 || startAngle_int > 360 || endAngle_int < 0 || endAngle_int > 360) {
+                if (startAngle_dob < 0 || startAngle_dob > 360 || endAngle_dob < 0 || endAngle_dob > 360) {
+
+                    std::cout << "Theta must be between 0 and 360 degrees!";
+
                     ShowMessagePopup("Error!", "Theta must be between 0 and 360 degrees!");
 
                     ImGui::End();
@@ -333,11 +468,13 @@ void RenderImGui(double currentFramerate) {
                 }
 
                 // Check if velocity is non-negative
-                if (velocity_int < MIN_VELOCITY || velocity_int > MAX_VELOCITY) {
+                if (velocity_dob < MIN_VELOCITY || velocity_dob > MAX_VELOCITY) {
                     std::string min = std::to_string(MIN_VELOCITY);
                     std::string max = std::to_string(MAX_VELOCITY);
                     std::string msg = "Velocity must be between " + min + " and " + max + ".";
                     const char* message = msg.c_str();
+
+                    std::cout << msg;
 
                     ShowMessagePopup("Error!", message);
 
@@ -347,7 +484,7 @@ void RenderImGui(double currentFramerate) {
 
 
                 // SPAWN PARTICLES
-                
+                addParticlesDiffAngles(n_int, X_int, Y_int, startAngle_dob, endAngle_dob, velocity_dob);
             }
             catch (const std::invalid_argument& e) {
                 std::cout << "Invalid argument: " << e.what() << std::endl;
@@ -367,8 +504,9 @@ void RenderImGui(double currentFramerate) {
 
         if (ImGui::Button("Add Particles")) {
             // Handle button click
-            std::cout << "Add Particles button clicked for different angles" << std::endl;
+            std::cout << "Add Particles button clicked for different velocities" << std::endl;
 
+            std::string n_str(n);
             std::string X_str(startX);
             std::string Y_str(startY);
             std::string angle_str(startAngle);
@@ -376,14 +514,17 @@ void RenderImGui(double currentFramerate) {
             std::string endVelocity_str(endVelocity);
 
             try {
+                int n_int = std::stoi(n_str);
                 int X_int = std::stoi(X_str);
                 int Y_int = std::stoi(Y_str);
-                int angle_int = std::stoi(angle_str);
-                int startVelocity_int = std::stoi(startVelocity_str);
-                int endVelocity_int = std::stoi(endVelocity_str);
+                double angle_dob = std::stod(angle_str);
+                double startVelocity_dob = std::stod(startVelocity_str);
+                double endVelocity_dob = std::stod(endVelocity_str);
 
                 // Check if coordinates are within the window bounds
                 if (X_int < 0 || X_int > PANEL_WIDTH || Y_int < 0 || Y_int > PANEL_HEIGHT) {
+                    std::cout << "Invalid Coordinates!";
+
                     ShowMessagePopup("Error!", "Invalid coordinates!");
 
                     ImGui::End();
@@ -391,7 +532,9 @@ void RenderImGui(double currentFramerate) {
                 }
 
                 // Check if angle is within the valid range
-                if (angle_int < 0 || angle_int > 360) {
+                if (angle_dob < 0 || angle_dob > 360) {
+                    std::cout << "Theta must be between 0 and 360 degrees!";
+
                     ShowMessagePopup("Error!", "Theta must be between 0 and 360 degrees!");
 
                     ImGui::End();
@@ -399,11 +542,13 @@ void RenderImGui(double currentFramerate) {
                 }
 
                 // Check if velocity is non-negative
-                if (startVelocity_int < MIN_VELOCITY || startVelocity_int < MAX_VELOCITY || endVelocity_int < MIN_VELOCITY || endVelocity_int < MAX_VELOCITY) {
+                if (startVelocity_dob < MIN_VELOCITY || startVelocity_dob > MAX_VELOCITY || endVelocity_dob < MIN_VELOCITY || endVelocity_dob > MAX_VELOCITY) {
                     std::string min = std::to_string(MIN_VELOCITY);
                     std::string max = std::to_string(MAX_VELOCITY);
                     std::string msg = "Velocities must be between " + min + " and " + max + ".";
                     const char* message = msg.c_str();
+
+                    std::cout << msg;
 
                     ShowMessagePopup("Error!", message);
 
@@ -413,6 +558,7 @@ void RenderImGui(double currentFramerate) {
 
 
                 // SPAWN PARTICLES
+                addParticlesDiffVelocities(n_int, X_int, Y_int, angle_dob, startVelocity_dob, endVelocity_dob);
             }
             catch (const std::invalid_argument& e) {
                 std::cout << "Invalid argument: " << e.what() << std::endl;
@@ -472,15 +618,15 @@ void listenForClients(SOCKET serverSocket) {
 }
 
 // Function to handle receiving messages from clients
-void receiveMessages(const std::vector<SOCKET>& clientSockets) {
+void receiveMessages(const std::vector<SOCKET>& clientSockets){
     while (true) {
-        for (SOCKET clientSocket : clientSockets) {
-            char buffer[1024];
-            int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-            if (bytesReceived > 0) {
-                std::cout << "Received: " << std::string(buffer, bytesReceived) << "\n";
-            }
-        }
+        /*char buffer[1024];
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        std::string jsonString(buffer);
+        json res = json::parse(jsonString);
+        res["name"] << std::endl;
+        res["age"] << std::endl;
+        res["city"];*/
     }
 }
 
@@ -590,7 +736,7 @@ int main() {
         return -1;
     }
 
-    GLFWwindow* window = glfwCreateWindow(1540, 720, "Particle Simulator", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1540, 722, "Particle Simulator", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -657,6 +803,9 @@ int main() {
         }
   
         ImGui::Render();
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
