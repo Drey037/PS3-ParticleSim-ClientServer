@@ -129,18 +129,18 @@ public class ParticleSystemApp extends JFrame {
         String serverAddress = "";
         boolean connected = false;
 
-        while (!connected) {
-            serverAddress = ServerAddressDialog.showDialog();
-            if (serverAddress != null && !serverAddress.isEmpty()) {
-                connected = clientConnect(serverAddress);
-                if (!connected) {
-                    JOptionPane.showMessageDialog(null, "Failed to connect to the server. Please try again.", "Connection Failed", JOptionPane.ERROR_MESSAGE);
+            while (!connected) {
+                serverAddress = ServerAddressDialog.showDialog();
+                if (serverAddress != null && !serverAddress.isEmpty()) {
+                    connected = clientConnect(serverAddress);
+                    if (!connected) {
+                        JOptionPane.showMessageDialog(null, "Failed to connect to the server. Please try again.", "Connection Failed", JOptionPane.ERROR_MESSAGE);
+                    }
+                } else {
+                    // User closed the dialog without entering an address
+                    System.exit(0); // Exit the application
                 }
-            } else {
-                // User closed the dialog without entering an address
-                System.exit(0); // Exit the application
             }
-        }
 
         // Proceed with the application after a successful connection
         System.out.println("Successfully connected to the server: " + serverAddress);
