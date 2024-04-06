@@ -221,6 +221,12 @@ public class ParticleSystemApp extends JFrame {
     public void receiveThread() {
         while (true) {
             try {
+                // Check if the socket is closed before attempting to read from it
+                if (socket.isClosed()) {
+                    System.out.println("Socket is closed. Exiting receiveThread.");
+                    break; // Exit the loop if the socket is closed
+                }
+                
                 // Receive JSON data from the server
                 InputStream inputStream = socket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
@@ -298,9 +304,12 @@ public class ParticleSystemApp extends JFrame {
                 // If end then break
                 // running = false; // Uncomment to break the loop based on a condition
             } catch (IOException e) {
-                e.printStackTrace(); // Or handle the exception as needed
+                if (e.getMessage().contains("Socket closed")) {
+                    System.out.println("Socket closed. Exiting receiveThread.");
+                } else {
+                    e.printStackTrace(); // Handle other IOExceptions as needed
+                }
                 break;
-                // Handle the exception as needed, possibly by breaking out of the loop
             } catch (JSONException e) {
                 e.printStackTrace(); // Or handle the exception as needed
                 // Handle the exception as needed
