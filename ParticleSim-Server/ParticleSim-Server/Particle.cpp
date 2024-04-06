@@ -1,5 +1,7 @@
 #include "Particle.h"
 
+const double Particle::PI = 3.14159265358979323846;
+
 Particle::Particle(int x, int y, double velocity, double theta) {
     this->x = x;
     this->y = y;

@@ -7,10 +7,6 @@
 #include <iostream>
 #include <algorithm>
 
-#ifndef PI
-#define PI 3.14159265358979323846
-#endif
-
 class Particle {
 private:
     static const int size = 3;
@@ -21,6 +17,7 @@ private:
     double theta;
     static const int SCREEN_WIDTH = 1280;
     static const int SCREEN_HEIGHT = 720;
+    static const double PI; // Ensure PI is defined and accessible
 
 public:
     Particle(int x, int y, double velocity, double theta);
@@ -30,7 +27,7 @@ public:
     double getTheta() const;
     double getVelocity() const;
     int getSize() const;
-    double degreesToRadians(double degrees); // Function declaration
+    static double degreesToRadians(double degrees); // Function declaration
 };
 
 #endif // PARTICLE_H

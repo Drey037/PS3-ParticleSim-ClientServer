@@ -3,6 +3,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.Socket;
 import java.net.URL;
@@ -77,6 +79,23 @@ public class ParticleSystemApp extends JFrame {
 
         pack(); // Adjusts the frame size to fit the preferred size of its components
         setLocationRelativeTo(null); // Centers the frame on the screen
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                // Perform cleanup tasks here
+                System.out.println("Closing connection to the server...");
+                try {
+                    if (socket != null && !socket.isClosed()) {
+                        socket.close(); // Close the socket connection
+                    }
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                System.out.println("Connection to the server closed.");
+                System.exit(0); // Exit the application
+            }
+        });
 
         addKeyListener(new KeyAdapter() {
             @Override

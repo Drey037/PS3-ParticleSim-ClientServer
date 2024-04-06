@@ -12,7 +12,7 @@ public:
     SOCKET getSocket();
     int getX();
     int getY();
-    int getID();
+    int getID() const; 
     static int currentID;
 
 private:

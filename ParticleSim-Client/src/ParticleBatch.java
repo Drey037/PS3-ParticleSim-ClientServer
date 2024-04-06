@@ -8,7 +8,7 @@ public class ParticleBatch extends Thread {
 
     private int numParticles;
 
-    private final int MAX_LOAD = 20;
+    private final int MAX_LOAD = 10000;
 
     private final int id;
 
@@ -65,7 +65,7 @@ public class ParticleBatch extends Thread {
             }
 
             try {
-                //Thread.sleep(10); // Control the update rate
+                Thread.sleep(10); // Control the update rate
             } catch (Exception e) {
                 e.printStackTrace();
             }

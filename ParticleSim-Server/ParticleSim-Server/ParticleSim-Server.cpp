@@ -38,10 +38,10 @@ std::vector<std::unique_ptr<ParticleBatch>> particleBatchList;
 std::mutex particleListLock;
 std::vector<Ghost> clients;
 SOCKET serverSocket;
-const int MAX_LOAD = 100; // Assuming MAX_LOAD is a constant
+const int MAX_LOAD = 10000; // Assuming MAX_LOAD is a constant
 
 const double MIN_VELOCITY = 5.0; // Define your minimum velocity here
-const double MAX_VELOCITY = 50.0; // Define your maximum velocity here
+const double MAX_VELOCITY = 5000.0; // Define your maximum velocity here
 const int PANEL_WIDTH = 1280; // Define your maximum velocity here
 const int PANEL_HEIGHT = 720; // Define your maximum velocity here
 int numClients;
@@ -100,18 +100,16 @@ void listenForClients(SOCKET serverSocket) {
         int clientAddrSize = sizeof(clientAddr);
         SOCKET clientSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrSize);
         if (clientSocket != INVALID_SOCKET) {
-            std::cout << "Client connected\n";
+            std::cout << "\nClient connected\n";
             clients.push_back(Ghost(1, 1, clientSocket));
 
-            Ghost trial = clients.back();
-            if (trial.getSocket() == INVALID_SOCKET) {
-                throw std::runtime_error("Socket is not initialized");
-            }
+            Ghost& newClient = clients.back(); // Get a reference to the newly added client
+            std::cout << "Client ID: " << newClient.getID() << " connected\n"; // Print the client ID
 
             // Send a welcome
             json j;
             j.push_back({ {"Type", 0} });
-            j.push_back({ {"ID", Ghost::currentID} });
+            j.push_back({ {"ID", newClient.getID()} }); // Use the new client's ID
             std::string serializedJson = j.dump();
             serializedJson += '\n'; // Add newline character at the end
 
@@ -128,6 +126,25 @@ void listenForClients(SOCKET serverSocket) {
         }
     }
 }
+
+
+void removeClient(int clientID) {
+    // Find the client in the vector
+    auto it = std::find_if(clients.begin(), clients.end(), [clientID](const Ghost& client) {
+        return client.getID() == clientID; // Corrected line
+        });
+
+    // If the client was found, remove it
+    if (it != clients.end()) {
+        clients.erase(it);
+        std::cout << "Client removed successfully." << std::endl;
+    }
+    else {
+        std::cout << "Client not found." << std::endl;
+    }
+}
+
+
 
 void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
     json j;
@@ -150,9 +167,10 @@ void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
 // Function to handle receiving messages from clients
 void receiveMessages() {
     while (true) {
-        for (auto& client : clients) {
+        std::vector<int> clientsToRemove;
+        for (auto it = clients.begin(); it != clients.end(); /* no increment here */) {
             char buffer[1024];
-            int bytesReceived = recv(client.getSocket(), buffer, sizeof(buffer), 0);
+            int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
             cout << "Here\n";
             if (bytesReceived > 0) {
                 // Ensure the buffer is null-terminated
@@ -167,7 +185,6 @@ void receiveMessages() {
                     int y = res["Y"];
 
                     // Process the parsed values as needed
-                    // For example, print them out
                     std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
                     sendNewPositionsToAllExcept(clientID, x, y);
                 }
@@ -177,19 +194,28 @@ void receiveMessages() {
                 catch (json::type_error& e) {
                     std::cerr << "JSON type error: " << e.what() << std::endl;
                 }
+
+                ++it; // Increment the iterator only if the client is still connected
             }
             else if (bytesReceived == 0) {
-                // Handle the case where the connection is closed
-                std::cout << "Connection closed" << std::endl;
-                break; // Exit the loop if the connection is closed
+                // Handle the case where a client connection is closed
+                std::cout << "Client with ID " << it->getID() << " disconnected" << std::endl;
+                clientsToRemove.push_back(it->getID()); // Mark the client for removal
+                ++it; // Increment the iterator to continue with the next client
             }
             else {
                 // Handle other errors
                 std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
+                ++it; // Increment the iterator to continue with the next client
             }
+        }
+
+        for (int clientID : clientsToRemove) {
+            removeClient(clientID);
         }
     }
 }
+
 
 int serverStart() {
     // Initialize Winsock
@@ -233,7 +259,10 @@ int serverStart() {
 
     return 0;
 }
+
+
 // ---------------------------END SERVER STUFF ----------------------------------------
+
 // ----------------------ADDING PARTICLES---------------------------------------------
 struct ParticleBatchComparator {
     bool operator()(const std::unique_ptr<ParticleBatch>& batch1Ptr, const std::unique_ptr<ParticleBatch>& batch2Ptr) const {
@@ -723,12 +752,38 @@ void RenderImGui(double currentFramerate) {
     ImGui::End();
 }
 
+static void GLFWErrorCallback(int error, const char* description) {
+    std::cout << "GLFW Error " << description << " code: " << error << std::endl;
+}
+
 int main() {
     serverStart();
 
     // Create threads for listening, receiving, and sending
     thread listenThread(listenForClients, serverSocket);
     thread receiveThread(receiveMessages);
+
+
+    if (!glfwInit()) {
+        std::cout << "Failed to initialize GLFW" << std::endl;
+        std::cin.get();
+    }
+
+    glfwSetErrorCallback(GLFWErrorCallback);
+
+    GLFWwindow* window = glfwCreateWindow(1540, 722, "Particle Simulator", nullptr, nullptr);
+    if (!window) {
+        std::cerr << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+
+    particleBatchList.emplace_back(std::make_unique<ParticleBatch>());
+
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(0); // Disable Vsync
+
+    InitImGui(window);
 
     // FPS Stuff
     double frameTime = 0.0; // Time since the last frame
@@ -748,27 +803,6 @@ int main() {
     double currentFramerate = 0.0;
     double lastUIUpdateTime = 0.0;
 
-
-
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return -1;
-    }
-
-    GLFWwindow* window = glfwCreateWindow(1540, 722, "Particle Simulator", nullptr, nullptr);
-    if (!window) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
-
-    particleBatchList.emplace_back(std::make_unique<ParticleBatch>());
-
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(0); // Disable Vsync
-
-    InitImGui(window);
-
     while (!glfwWindowShouldClose(window)) {
         double currentTime = glfwGetTime();
         frameTime = currentTime - lastUpdateTime;
@@ -786,9 +820,6 @@ int main() {
         double deltaTime = elapsedTime.count();
 
         glfwPollEvents();
-
-        glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
         RenderImGui(currentFramerate);
 
@@ -825,9 +856,20 @@ int main() {
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
+        glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+        glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
+
+        // Calculate the time it took to render this frame
+        double frameEndTime = glfwGetTime();
+        double frameDuration = frameEndTime - currentTime;
+
+        // If the frame took less than the target duration, sleep for the remaining time
+        if (frameDuration < targetFrameDuration.count()) {
+            std::this_thread::sleep_for(std::chrono::duration<double>(targetFrameDuration.count() - frameDuration));
+        }
     }
 
     // Wait for threads to finish (this will never happen in this example, but it's here for completeness)

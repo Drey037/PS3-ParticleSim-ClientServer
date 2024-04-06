@@ -23,6 +23,6 @@ int Ghost::getY() {
     return y;
 }
 
-int Ghost::getID() {
+int Ghost::getID() const {
     return id;
 }
