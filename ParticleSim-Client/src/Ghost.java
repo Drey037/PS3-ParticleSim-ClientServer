@@ -40,8 +40,7 @@ public class Ghost {
         int newX = x + dx;
         int newY = y + dy;
 
-        if (newX >= 0 && newX <= 1280 &&
-                newY >= 0 && newY <= 720) {
+        if (newX >= 0 && newX <= 1280 && newY > 0 && newY <= 720) {
             x = newX;
             y = newY;
             System.out.println("X and Y: " + newX + ", " + newY);
