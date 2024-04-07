@@ -96,6 +96,22 @@ public class ParticlePanel extends JPanel {
         g2d.setColor(Color.WHITE);
         g2d.fillRect(0, 0, getWidth(), getHeight());
 
+        for (ParticleBatch batch : particleBatchList) {
+            ArrayList<Particle> particleList = batch.getParticles(); // Thread-safe snapshot
+            for (Particle particle : particleList) {
+                int pX = particle.getX() - cameraX;
+                int pY = HEIGHT - particle.getY() - cameraY;
+
+                if (pX >= 0 && pX < COL && pY >= 0 && pY < ROW) {
+                    pX = pX * ZOOMX;
+                    pY = pY * ZOOMY;
+                    g.setColor(particle.getColor());
+                    g.fillRect(pX, pY, particle.getSize() * 4, particle.getSize() * 4);
+                }
+            }
+        }
+
+
         // Draw particles
         for (ParticleBatch batch : particleBatchList) {
             ArrayList<Particle> particleList = batch.getParticles();

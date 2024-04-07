@@ -787,7 +787,7 @@ int main() {
 
     // FPS Stuff
     double frameTime = 0.0; // Time since the last frame
-    double targetFrameTime = 1.0 / 60.0; // Target time per frame (60 FPS)
+    double targetFrameTime = 1.0 / 30.0; // Target time per frame (60 FPS)
     double updateInterval = 0.5; // Interval for updating particles (0.5 seconds)
     double lastUpdateTime = 0.0; // Last time particles were updated
     double lastFPSUpdateTime = 0.0; // Last time the framerate was updated

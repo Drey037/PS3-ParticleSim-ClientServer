@@ -19,7 +19,9 @@ public class ParticleBatch extends Thread {
     }
 
     public ArrayList<Particle> getParticles() {
-        return particles;
+        synchronized (particleListLock) {
+            return new ArrayList<>(particles);
+        }
     }
 
     public int getNumParticles() {
