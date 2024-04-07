@@ -6,8 +6,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.*;
-import java.net.Socket;
-import java.net.URL;
+import java.net.*;
 import java.util.*;
 import java.util.List;
 
@@ -309,12 +308,15 @@ public class ParticleSystemApp extends JFrame {
 
                 // If end then break
                 // running = false; // Uncomment to break the loop based on a condition
-            } catch (IOException e) {
-                if (e.getMessage().contains("Socket closed")) {
-                    System.out.println("Socket closed. Exiting receiveThread.");
+            } catch (SocketException e) {
+                if (e.getMessage().contains("Connection reset")) {
+                    System.out.println("Server has abruptly closed the connection. Exiting receiveThread.");
                 } else {
-                    e.printStackTrace(); // Handle other IOExceptions as needed
+                    e.printStackTrace(); // Handle other SocketExceptions as needed
                 }
+                break;
+            } catch (IOException e) {
+                e.printStackTrace(); // Handle other IOExceptions as needed
                 break;
             } catch (JSONException e) {
                 e.printStackTrace(); // Or handle the exception as needed
@@ -325,6 +327,7 @@ public class ParticleSystemApp extends JFrame {
 
         System.out.println("Broke out of the loop");
 
+        // Close the client window and exit the application
         System.out.println("Server has closed the connection. Closing the client window.");
         SwingUtilities.invokeLater(() -> {
             ParticleSystemApp.this.dispose(); // Close the JFrame
