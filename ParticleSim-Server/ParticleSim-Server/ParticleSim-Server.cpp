@@ -786,91 +786,70 @@ int main() {
     InitImGui(window);
 
     // FPS Stuff
-    double frameTime = 0.0; // Time since the last frame
-    double targetFrameTime = 1.0 / 30.0; // Target time per frame (60 FPS)
-    double updateInterval = 0.5; // Interval for updating particles (0.5 seconds)
-    double lastUpdateTime = 0.0; // Last time particles were updated
-    double lastFPSUpdateTime = 0.0; // Last time the framerate was updated
-
     const double targetFPS = 60.0;
+    double frameTime = 0.0; // Time since the last frame
+    double targetFrameTime = 1.0 / targetFPS; // Target time per frame (60 FPS)
+   
     const std::chrono::duration<double> targetFrameDuration = std::chrono::duration<double>(1.0 / targetFPS);
 
-    std::chrono::steady_clock::time_point prevTime = std::chrono::steady_clock::now();
-
-    const double timeStep = 1.0 / targetFPS; // Time step for updates
-    double accumulator = 0.0; // Accumulates elapsed time
-
+    auto lastFrameTime = std::chrono::steady_clock::now();
+    double frameTimeAccumulator = 0.0;
     double currentFramerate = 0.0;
-    double lastUIUpdateTime = 0.0;
+    int frameCount = 0;
+    double lastFPSUpdateTime = glfwGetTime();
 
     while (!glfwWindowShouldClose(window)) {
-        double currentTime = glfwGetTime();
-        frameTime = currentTime - lastUpdateTime;
+    auto currentFrameTime = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsedTime = currentFrameTime - lastFrameTime;
+    double deltaTime = elapsedTime.count();
 
-        std::chrono::steady_clock::time_point currentTimeForDelta = std::chrono::steady_clock::now();
-        std::chrono::duration<double> elapsedTime = currentTimeForDelta - prevTime;
-        prevTime = currentTimeForDelta;
+    // Update game state
+    glfwPollEvents();
+    RenderImGui(currentFramerate);
 
-        accumulator += frameTime;
+    std::vector<std::future<void>> futures;
+    std::lock_guard<std::mutex> lock(particleListLock);
 
-        if (elapsedTime > std::chrono::seconds(1)) {
-            elapsedTime = std::chrono::duration<double>(1.0 / targetFPS);
-        }
-
-        double deltaTime = elapsedTime.count();
-
-        glfwPollEvents();
-
-        RenderImGui(currentFramerate);
-
-        while (accumulator >= timeStep) {
-            std::vector<std::future<void>> futures;
-            std::lock_guard<std::mutex> lock(particleListLock);
-
-            for (auto& batch : particleBatchList) {
-                ParticleBatch& batchDef = *batch;
-
-                futures.push_back(std::async(std::launch::async, [&batchDef, timeStep]() {
-                    batchDef.updateParticles(timeStep);
-                    }));
-            }
-
-            futures.push_back(std::async(std::launch::async, DrawElements));
-
-            for (auto& future : futures) {
-                future.wait();
-            }
-            accumulator -= timeStep;
-        }
-
-        if (frameTime >= targetFrameTime) {
-            lastUpdateTime = currentTime;
-        }
-
-        if (currentTime - lastFPSUpdateTime >= updateInterval) {
-            currentFramerate = 1.0 / frameTime;
-            lastFPSUpdateTime = currentTime;
-        }
-
-        ImGui::Render();
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
-        glViewport(0, 0, display_w, display_h);
-        glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        glfwSwapBuffers(window);
-
-        // Calculate the time it took to render this frame
-        double frameEndTime = glfwGetTime();
-        double frameDuration = frameEndTime - currentTime;
-
-        // If the frame took less than the target duration, sleep for the remaining time
-        if (frameDuration < targetFrameDuration.count()) {
-            std::this_thread::sleep_for(std::chrono::duration<double>(targetFrameDuration.count() - frameDuration));
-        }
+    for (auto& batch : particleBatchList) {
+        ParticleBatch& batchDef = *batch;
+        futures.push_back(std::async(std::launch::async, [&batchDef, targetFrameDuration]() {
+            batchDef.updateParticles(targetFrameDuration.count());
+            }));
     }
+
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    // Rendering
+    ImGui::Render();
+    int display_w, display_h;
+    glfwGetFramebufferSize(window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    glfwSwapBuffers(window);
+
+    // Frame rate control
+    auto endFrameTime = std::chrono::steady_clock::now();
+    std::chrono::duration<double> frameDuration = endFrameTime - currentFrameTime;
+
+    frameTimeAccumulator += frameDuration.count();
+    frameCount++;
+    if (glfwGetTime() - lastFPSUpdateTime >= 1.0) {
+        currentFramerate = frameCount / frameTimeAccumulator;
+        frameCount = 0;
+        frameTimeAccumulator = 0.0;
+        lastFPSUpdateTime = glfwGetTime();
+    }
+
+    if (frameDuration < targetFrameDuration) {
+        std::this_thread::sleep_for(targetFrameDuration - frameDuration);
+    }
+
+    lastFrameTime = currentFrameTime;
+}
 
     // Wait for threads to finish (this will never happen in this example, but it's here for completeness)
     listenThread.join();
