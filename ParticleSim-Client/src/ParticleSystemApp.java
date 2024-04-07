@@ -201,9 +201,9 @@ public class ParticleSystemApp extends JFrame {
         try {
             // Socket
 
-            // SERVER_IP = input
-            String address = "localhost"; // TEMPORARY
-            //InetAddress address = InetAddress.getByName(SERVER_IP); // Enter host ip address
+            String SERVER_IP = input;
+            // String address = "localhost"; // TEMPORARY
+            InetAddress address = InetAddress.getByName(SERVER_IP); // Enter host ip address
             int CLIENT_PORT = 12345;
 
             socket = new Socket(address, CLIENT_PORT);
