@@ -36,7 +36,8 @@ ImVec4 particleColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 std::vector<std::unique_ptr<ParticleBatch>> particleBatchList;
 std::mutex particleListLock;
-std::vector<Ghost> clients;
+std::list<Ghost> clients;
+//std::vector<Ghost> clients;
 SOCKET serverSocket;
 const int MAX_LOAD = 10000; // Assuming MAX_LOAD is a constant
 
@@ -129,24 +130,15 @@ void listenForClients(SOCKET serverSocket) {
 
 
 void removeClient(int clientID) {
-    // Find the client in the vector
-    auto it = std::find_if(clients.begin(), clients.end(), [clientID](const Ghost& client) {
-        return client.getID() == clientID; // Corrected line
+    clients.remove_if([clientID](const Ghost& client) {
+        return client.getID() == clientID;
         });
-
-    // If the client was found, remove it
-    if (it != clients.end()) {
-        clients.erase(it);
-        std::cout << "Client removed successfully." << std::endl;
-    }
-    else {
-        std::cout << "Client not found." << std::endl;
-    }
 }
 
 
 
-void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
+
+void sendNewPositionsToAll(int clientID, int newX, int newY) {
     json j;
     j.push_back({ {"Type", 1} });
     for (const auto& client : clients) {
@@ -163,10 +155,10 @@ void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
     }
 }
 
+
 // Function to handle receiving messages from clients
 void receiveMessages() {
     while (true) {
-        std::vector<int> clientsToRemove;
         for (auto it = clients.begin(); it != clients.end(); /* no increment here */) {
             char buffer[1024];
             int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
@@ -177,7 +169,9 @@ void receiveMessages() {
                 std::string jsonString(buffer);
                 try {
                     json res = json::parse(jsonString);
-                    cout << res << "\n";
+                    //cout << res << "\n";
+                    std::cout << "Received message from client: " << res << "\n";
+
                     // Assuming the JSON contains "ClientID" as a string, and "X" and "Y" as integers
                     int clientID = res["ClientID"];
                     int x = res["X"];
@@ -185,7 +179,7 @@ void receiveMessages() {
 
                     // Process the parsed values as needed
                     std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
-                    sendNewPositionsToAllExcept(clientID, x, y);
+                    sendNewPositionsToAll(clientID, x, y);
                 }
                 catch (json::parse_error& e) {
                     std::cerr << "JSON parse error: " << e.what() << std::endl;
@@ -199,8 +193,7 @@ void receiveMessages() {
             else if (bytesReceived == 0) {
                 // Handle the case where a client connection is closed
                 std::cout << "Client with ID " << it->getID() << " disconnected" << std::endl;
-                clientsToRemove.push_back(it->getID()); // Mark the client for removal
-                ++it; // Increment the iterator to continue with the next client
+                it = clients.erase(it); // Correctly remove the disconnected client and get the next valid iterator
             }
             else {
                 // Handle other errors
@@ -208,12 +201,9 @@ void receiveMessages() {
                 ++it; // Increment the iterator to continue with the next client
             }
         }
-
-        for (int clientID : clientsToRemove) {
-            removeClient(clientID);
-        }
     }
 }
+
 
 
 int serverStart() {

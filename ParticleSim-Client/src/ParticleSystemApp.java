@@ -100,31 +100,32 @@ public class ParticleSystemApp extends JFrame {
                     case KeyEvent.VK_W:
                     case KeyEvent.VK_UP:
                         dy = 1;
-                        //System.out.println("UP");
                         break;
                     case KeyEvent.VK_S:
                     case KeyEvent.VK_DOWN:
                         dy = -1;
-                        //System.out.println("RIGHT");
                         break;
                     case KeyEvent.VK_A:
                     case KeyEvent.VK_LEFT:
                         dx = -1;
                         character.turnChar(true);
-                        //System.out.println("LEFT");
                         break;
                     case KeyEvent.VK_D:
                     case KeyEvent.VK_RIGHT:
                         dx = 1;
                         character.turnChar(false);
-                        //System.out.println("DOWN");
                         break;
                 }
                 character.move(dx, dy);
-                sendThread();
                 particlePanel.repaint(); // Redraw the panel to reflect the character's new position
+
+                // Only send the movement data if dx or dy is not 0 (i.e., a valid movement was made)
+                if (dx != 0 || dy != 0) {
+                    sendThread();
+                }
             }
         });
+
         // Start gamelogic thread
         new Thread(this::gameLoop).start();
     }
