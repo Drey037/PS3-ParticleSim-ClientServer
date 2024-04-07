@@ -124,6 +124,24 @@ void listenForClients(SOCKET serverSocket) {
                 WSACleanup();
             }
             std::cout << "Sent welcome !\n";
+
+            // Send existing particles to the newly connected client
+            std::lock_guard<std::mutex> lock(particleListLock); // Ensure thread safety
+            for (const auto& batch : particleBatchList) {
+                const ParticleBatch& batchDef = *batch;
+                std::vector<Particle> particles = batchDef.getParticles();
+                std::string serializedParticles = serializeParticles(particles, batchDef.getID());
+                const char* particleData = serializedParticles.c_str();
+                size_t particleDataLength = serializedParticles.size();
+
+                int bytesSentToNewClient = send(clientSocket, particleData, particleDataLength, 0);
+                if (bytesSentToNewClient == SOCKET_ERROR) {
+                    std::cerr << "Error sending particle data to new client: " << WSAGetLastError() << std::endl;
+                    closesocket(serverSocket);
+                    WSACleanup();
+                }
+            }
+
         }
     }
 }
@@ -494,10 +512,10 @@ static void DrawElements() {
 
     // Draw particles
     for (auto& batch : particleBatchList) {
-        ParticleBatch& batchDef = *batch;
+        const ParticleBatch& batchDef = *batch; // Ensure batchDef is const
 
-        std::vector<Particle>& particleList = batchDef.getParticles();
-        for (Particle& particle : particleList) {
+        const std::vector<Particle>& particleList = batchDef.getParticles(); // Use const reference
+        for (const Particle& particle : particleList) { // Use const reference for particles
             ImVec2 screenPos = ImVec2(particle.getX(), 720 - particle.getY());
 
             float size = static_cast<float>(particle.getSize()); // Cast the size to float
@@ -505,6 +523,7 @@ static void DrawElements() {
         }
     }
 }
+
 
 // Function to render ImGui
 void RenderImGui(double currentFramerate) {
