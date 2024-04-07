@@ -14,7 +14,7 @@ private:
     std::mutex particleListLock;
     int numParticles;
     int batchID;
-    static const int MAX_LOAD = 30;
+    static const int MAX_LOAD = 1000;
     std::thread updateThread; // Thread for running the update loop
 
 public:

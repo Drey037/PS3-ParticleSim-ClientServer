@@ -106,7 +106,7 @@ public class ParticlePanel extends JPanel {
                     pX = pX * ZOOMX;
                     pY = pY * ZOOMY;
                     g.setColor(particle.getColor());
-                    g.fillRect(pX, pY, particle.getSize() * 4, particle.getSize() * 4);
+                    g.fillOval(pX, pY, particle.getSize() * 4, particle.getSize() * 4);
                 }
             }
         }

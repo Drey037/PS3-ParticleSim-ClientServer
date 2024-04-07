@@ -39,15 +39,18 @@ std::mutex particleListLock;
 std::list<Ghost> clients;
 //std::vector<Ghost> clients;
 SOCKET serverSocket;
-const int MAX_LOAD = 10000; // Assuming MAX_LOAD is a constant
+const int MAX_LOAD = 1000; // Assuming MAX_LOAD is a constant
 
 const double MIN_VELOCITY = 5.0; // Define your minimum velocity here
-const double MAX_VELOCITY = 5000.0; // Define your maximum velocity here
+const double MAX_VELOCITY = 500.0; // Define your maximum velocity here
 const int PANEL_WIDTH = 1280; // Define your maximum velocity here
 const int PANEL_HEIGHT = 720; // Define your maximum velocity here
 int numClients;
 int ParticleBatch::currentID = 0;
 int Ghost::currentID = 0;
+
+
+
 
 // Function to initialize ImGui
 void InitImGui(GLFWwindow* window) {
@@ -780,6 +783,8 @@ static void GLFWErrorCallback(int error, const char* description) {
     std::cout << "GLFW Error " << description << " code: " << error << std::endl;
 }
 
+
+
 int main() {
     serverStart();
 
@@ -794,6 +799,8 @@ int main() {
     }
 
     glfwSetErrorCallback(GLFWErrorCallback);
+
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     GLFWwindow* window = glfwCreateWindow(1540, 722, "Particle Simulator", nullptr, nullptr);
     if (!window) {
@@ -810,11 +817,8 @@ int main() {
     InitImGui(window);
 
     // FPS Stuff
-    const double targetFPS = 60.0;
-    double frameTime = 0.0; // Time since the last frame
+    const double targetFPS = 60.0; // Set a fixed target FPS of 60
     double targetFrameTime = 1.0 / targetFPS; // Target time per frame (60 FPS)
-   
-    const std::chrono::duration<double> targetFrameDuration = std::chrono::duration<double>(1.0 / targetFPS);
 
     auto lastFrameTime = std::chrono::steady_clock::now();
     double frameTimeAccumulator = 0.0;
@@ -823,57 +827,61 @@ int main() {
     double lastFPSUpdateTime = glfwGetTime();
 
     while (!glfwWindowShouldClose(window)) {
-    auto currentFrameTime = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsedTime = currentFrameTime - lastFrameTime;
-    double deltaTime = elapsedTime.count();
+        auto currentFrameTime = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsedTime = currentFrameTime - lastFrameTime;
+        double deltaTime = elapsedTime.count();
 
-    // Update game state
-    glfwPollEvents();
-    RenderImGui(currentFramerate);
+        // Update game state
+        glfwPollEvents();
+        RenderImGui(currentFramerate);
 
-    std::vector<std::future<void>> futures;
-    std::lock_guard<std::mutex> lock(particleListLock);
+        // Update particles
+        std::vector<std::future<void>> futures;
+        std::lock_guard<std::mutex> lock(particleListLock);
 
-    for (auto& batch : particleBatchList) {
-        ParticleBatch& batchDef = *batch;
-        futures.push_back(std::async(std::launch::async, [&batchDef, targetFrameDuration]() {
-            batchDef.updateParticles(targetFrameDuration.count());
-            }));
+        for (auto& batch : particleBatchList) {
+            ParticleBatch& batchDef = *batch;
+            futures.push_back(std::async(std::launch::async, [&batchDef, deltaTime]() {
+                batchDef.updateParticles(deltaTime);
+                }));
+        }
+
+        for (auto& future : futures) {
+            future.wait();
+        }
+
+        // Rendering
+        ImGui::Render();
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        glfwSwapBuffers(window);
+
+        // Frame rate control
+        auto endFrameTime = std::chrono::steady_clock::now();
+        std::chrono::duration<double> frameDuration = endFrameTime - currentFrameTime;
+
+        frameTimeAccumulator += frameDuration.count();
+        frameCount++;
+        if (glfwGetTime() - lastFPSUpdateTime >= 1.0) {
+            currentFramerate = frameCount / frameTimeAccumulator;
+            frameCount = 0;
+            frameTimeAccumulator = 0.0;
+            lastFPSUpdateTime = glfwGetTime();
+        }
+
+        // Correctly calculate and apply the sleep duration
+        double frameDurationInSeconds = frameDuration.count();
+        if (frameDurationInSeconds < targetFrameTime) {
+            double sleepDurationInSeconds = targetFrameTime - frameDurationInSeconds;
+            std::this_thread::sleep_for(std::chrono::duration<double>(sleepDurationInSeconds));
+        }
+
+        lastFrameTime = currentFrameTime;
     }
-
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    // Rendering
-    ImGui::Render();
-    int display_w, display_h;
-    glfwGetFramebufferSize(window, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
-    glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    glfwSwapBuffers(window);
-
-    // Frame rate control
-    auto endFrameTime = std::chrono::steady_clock::now();
-    std::chrono::duration<double> frameDuration = endFrameTime - currentFrameTime;
-
-    frameTimeAccumulator += frameDuration.count();
-    frameCount++;
-    if (glfwGetTime() - lastFPSUpdateTime >= 1.0) {
-        currentFramerate = frameCount / frameTimeAccumulator;
-        frameCount = 0;
-        frameTimeAccumulator = 0.0;
-        lastFPSUpdateTime = glfwGetTime();
-    }
-
-    if (frameDuration < targetFrameDuration) {
-        std::this_thread::sleep_for(targetFrameDuration - frameDuration);
-    }
-
-    lastFrameTime = currentFrameTime;
-}
 
     // Wait for threads to finish (this will never happen in this example, but it's here for completeness)
     listenThread.join();
