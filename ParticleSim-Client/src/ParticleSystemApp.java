@@ -232,6 +232,12 @@ public class ParticleSystemApp extends JFrame {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
                 String serializedCoordinates = reader.readLine(); // Assuming each message is a single line
 
+                // Check if the end of the stream has been reached
+                if (serializedCoordinates == null) {
+                    System.out.println("Server has closed the connection. Exiting receiveThread.");
+                    break; // Exit the loop if the server has closed the connection
+                }
+
                 JSONArray jsonArray = new JSONArray(serializedCoordinates);
                 // Get the type of message
                 int type = -1;
@@ -318,6 +324,12 @@ public class ParticleSystemApp extends JFrame {
         }
 
         System.out.println("Broke out of the loop");
+
+        System.out.println("Server has closed the connection. Closing the client window.");
+        SwingUtilities.invokeLater(() -> {
+            ParticleSystemApp.this.dispose(); // Close the JFrame
+            System.exit(0); // Exit the application
+        });
     }
 
     public void sendThread() {
