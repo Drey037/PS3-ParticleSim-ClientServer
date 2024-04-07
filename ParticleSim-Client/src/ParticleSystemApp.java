@@ -33,6 +33,7 @@ public class ParticleSystemApp extends JFrame {
     private Image texture_right;
 
     private static Socket socket;
+    private boolean isSocketClosed = false;
 
     private ObjectOutputStream out;
     private BufferedReader in;
@@ -82,19 +83,13 @@ public class ParticleSystemApp extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                // Perform cleanup tasks here
                 System.out.println("Closing connection to the server...");
-                try {
-                    if (socket != null && !socket.isClosed()) {
-                        socket.close(); // Close the socket connection
-                    }
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                }
+                closeSocket(); // Use the method to close the socket
                 System.out.println("Connection to the server closed.");
                 System.exit(0); // Exit the application
             }
         });
+
 
         addKeyListener(new KeyAdapter() {
             @Override
@@ -262,9 +257,13 @@ public class ParticleSystemApp extends JFrame {
                                 int clientY = jsonObject.getInt("Y");
                                 int id = jsonObject.getInt("ClientID");
 
+                                // Print the buddy's client ID and details
+                                System.out.println("Buddy Client ID: " + id + ", X: " + clientX + ", Y: " + clientY);
+
                                 for (Ghost buddy: Buddies) {
-                                    if (buddy.getId() == id)
+                                    if (buddy.getId() == id) {
                                         buddy.updatePos(clientX, clientY);
+                                    }
                                 }
                                 break;
 
@@ -325,6 +324,14 @@ public class ParticleSystemApp extends JFrame {
             }
         }
 
+        // Close resources properly
+        try {
+            if (in != null) in.close();
+            if (out != null) out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         System.out.println("Broke out of the loop");
 
         // Close the client window and exit the application
@@ -337,6 +344,12 @@ public class ParticleSystemApp extends JFrame {
 
     public void sendThread() {
         try {
+            // Check if the socket is closed before attempting to write to it
+            if (socket.isClosed()) {
+                System.out.println("Socket is closed. Cannot send data.");
+                return;
+            }
+
             PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
             JSONObject jsonObject = new JSONObject();
@@ -353,6 +366,20 @@ public class ParticleSystemApp extends JFrame {
         } catch (JSONException e) {
             e.printStackTrace(); // Or handle the exception as needed
             // Handle the exception as needed
+        }
+    }
+
+    public void closeSocket() {
+        if (!isSocketClosed) {
+            try {
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                isSocketClosed = true;
+            }
         }
     }
 

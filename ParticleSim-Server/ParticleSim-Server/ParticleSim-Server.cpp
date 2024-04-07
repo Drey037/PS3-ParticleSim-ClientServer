@@ -149,7 +149,9 @@ void removeClient(int clientID) {
 void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
     json j;
     j.push_back({ {"Type", 1} });
-    j.push_back({ {"X", newX},{"Y", newY} });
+    for (const auto& client : clients) {
+        j.push_back({ {"ClientID", client.getID()}, {"X", client.getX()}, {"Y", client.getY()} });
+    }
     std::string serializedJson = j.dump();
     serializedJson += '\n'; // Add newline character at the end
 
@@ -157,10 +159,7 @@ void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
     size_t dataLength = serializedJson.size();
 
     for (auto& client : clients) {
-        if (client.getID() != excludeClientID) {
-            // Send the message to the client
-            send(client.getSocket(), data, dataLength, 0);
-        }
+        send(client.getSocket(), data, dataLength, 0);
     }
 }
 
