@@ -226,6 +226,7 @@ public class ParticleSystemApp extends JFrame {
                 InputStream inputStream = socket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
                 String serializedCoordinates = reader.readLine(); // Assuming each message is a single line
+                System.out.println("\nReceived data: " + serializedCoordinates + "\n");
 
                 // Check if the end of the stream has been reached
                 if (serializedCoordinates == null) {
@@ -345,7 +346,6 @@ public class ParticleSystemApp extends JFrame {
 
     public void sendThread() {
         try {
-            // Check if the socket is closed before attempting to write to it
             if (socket.isClosed()) {
                 System.out.println("Socket is closed. Cannot send data.");
                 return;
@@ -353,22 +353,22 @@ public class ParticleSystemApp extends JFrame {
 
             PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
-            JSONObject jsonObject = new JSONObject();
-            jsonObject.put("ClientID", character.getId());
-            jsonObject.put("X", character.getX());
-            jsonObject.put("Y", character.getY());
+            JSONArray jsonArray = new JSONArray();
+            JSONObject positionObject = new JSONObject();
+            positionObject.put("ClientID", character.getId());
+            positionObject.put("X", character.getX());
+            positionObject.put("Y", character.getY());
+            jsonArray.put(positionObject);
 
-            String jsonString = jsonObject.toString();
+            String jsonString = jsonArray.toString();
             out.println(jsonString);
-            // running = false; // Uncomment to break the loop based on a condition
         } catch (IOException e) {
-            e.printStackTrace(); // Or handle the exception as needed
-            // Handle the exception as needed, possibly by breaking out of the loop
+            e.printStackTrace();
         } catch (JSONException e) {
-            e.printStackTrace(); // Or handle the exception as needed
-            // Handle the exception as needed
+            e.printStackTrace();
         }
     }
+
 
     public void closeSocket() {
         if (!isSocketClosed) {

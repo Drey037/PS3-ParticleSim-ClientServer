@@ -164,25 +164,41 @@ void receiveMessages() {
             int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
             cout << "Here\n";
             if (bytesReceived > 0) {
+                std::cout << "Received data: " << buffer << std::endl;
                 // Ensure the buffer is null-terminated
                 buffer[bytesReceived] = '\0';
                 std::string jsonString(buffer);
                 try {
-                    json res = json::parse(jsonString);
-                    //cout << res << "\n";
-                    std::cout << "Received message from client: " << res << "\n";
+                    // Parse the received JSON string
+                    json j = json::parse(jsonString);
 
-                    // Assuming the JSON contains "ClientID" as a string, and "X" and "Y" as integers
-                    int clientID = res["ClientID"];
-                    int x = res["X"];
-                    int y = res["Y"];
+                    // Check if the received data is a JSON array
+                    if (j.is_array()) {
+                        // Iterate over each element in the JSON array
+                        for (const auto& element : j) {
+                            // Check if the element is a JSON object
+                            if (element.is_object()) {
+                                // Access the properties of the JSON object
+                                int clientID = element["ClientID"];
+                                int x = element["X"];
+                                int y = element["Y"];
 
-                    // Process the parsed values as needed
-                    std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
-                    sendNewPositionsToAll(clientID, x, y);
+                                // Process the received data as needed
+                                std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
+                                sendNewPositionsToAll(clientID, x, y);
+                            }
+                            else {
+                                std::cerr << "Unexpected data type in JSON array" << std::endl;
+                            }
+                        }
+                    }
+                    else {
+                        std::cerr << "Received data is not a JSON array" << std::endl;
+                    }
                 }
                 catch (json::parse_error& e) {
                     std::cerr << "JSON parse error: " << e.what() << std::endl;
+                    std::cerr << "Raw data: " << buffer << std::endl;
                 }
                 catch (json::type_error& e) {
                     std::cerr << "JSON type error: " << e.what() << std::endl;
