@@ -251,7 +251,7 @@ public class ParticleSystemApp extends JFrame {
                             case 0: // Welcome
                                 int self_id = jsonObject.getInt("ID");
                                 character.setID(self_id);
-                                System.out.println(character.getId());
+                                System.out.println("Client is registered as ID " + character.getId());
 
                                 break;
                             case 1: // Received buddy client coordinates
@@ -262,10 +262,20 @@ public class ParticleSystemApp extends JFrame {
                                 // Print the buddy's client ID and details
                                 System.out.println("Buddy Client ID: " + id + ", X: " + clientX + ", Y: " + clientY);
 
-                                for (Ghost buddy: Buddies) {
+                                boolean buddyFound = false;
+                                for (Ghost buddy : Buddies) {
                                     if (buddy.getId() == id) {
                                         buddy.updatePos(clientX, clientY);
+                                        buddyFound = true;
+                                        break; // Exit the loop once the buddy is found and updated
                                     }
+                                }
+
+                                if (!buddyFound) {
+                                    // If the buddy was not found, append a new buddy to the list
+                                    Ghost newBud = new Ghost(clientX, clientY, texture_left, texture_right);
+                                    newBud.setID(id);
+                                    Buddies.add(newBud);
                                 }
                                 break;
 
