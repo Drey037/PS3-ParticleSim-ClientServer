@@ -181,9 +181,9 @@ void sendNewPositionsToAll(int clientID, int newX, int newY) {
 void receiveMessages() {
     while (true) {
         for (auto it = clients.begin(); it != clients.end(); /* no increment here */) {
-            char buffer[1024];
+            char buffer[1024] = { 0 };
             int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
-            cout << "Here\n";
+
             if (bytesReceived > 0) {
                 std::cout << "Received data: " << buffer << std::endl;
                 // Ensure the buffer is null-terminated
