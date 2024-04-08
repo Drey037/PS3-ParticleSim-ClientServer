@@ -126,7 +126,7 @@ public class ParticleSystemApp extends JFrame {
                 if (moved) {
                     character.move(dx, dy);
                     particlePanel.repaint(); // Redraw the panel to reflect the character's new position
-                    positionChanged = true;
+                    sendThread(); // Send the position update immediately
                 }
             }
         });
@@ -378,14 +378,6 @@ public class ParticleSystemApp extends JFrame {
                 System.out.println("Socket is closed. Cannot send data.");
                 return;
             }
-
-            // Get the socket's channel
-            SocketChannel socketChannel = SocketChannel.open();
-            socketChannel.connect(new InetSocketAddress("localhost", 80));
-            Socket socket = socketChannel.socket();
-
-            // Set the channel to non-blocking mode
-            socketChannel.configureBlocking(false);
 
             PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
