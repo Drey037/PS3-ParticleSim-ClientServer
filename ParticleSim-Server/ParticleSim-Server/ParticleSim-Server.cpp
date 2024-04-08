@@ -79,14 +79,13 @@ std::string serializeParticles(const std::vector <Particle>& particles, int batc
 }
 
 
-
  //This function is used to turn the json into string to be sent
 void sendCoordinates(const std::string& serializedCoordinates) {
     cout << "Sent coordinates";
     const char* data = serializedCoordinates.c_str();
     size_t dataLength = serializedCoordinates.size();
 
-    for (Ghost client: clients) {
+    for (Ghost client : clients) {
         SOCKET clientSocket = client.getSocket();
         int bytesSent = send(clientSocket, data, dataLength, 0);
         if (bytesSent == SOCKET_ERROR) {
@@ -185,41 +184,35 @@ void receiveMessages() {
             int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
 
             if (bytesReceived > 0) {
-                std::cout << "Received data: " << buffer << std::endl;
                 // Ensure the buffer is null-terminated
                 buffer[bytesReceived] = '\0';
-                std::string jsonString(buffer);
+                std::string receivedData(buffer);
+
+                // Append the received data to a buffer for this client
+                static std::map<int, std::string> clientBuffers;
+                clientBuffers[it->getID()] += receivedData;
+
+                // Attempt to parse the buffered data for this client
                 try {
-                    // Parse the received JSON string
-                    json j = json::parse(jsonString);
+                    // Process each message in the buffer independently
+                    size_t pos = 0;
+                    while ((pos = clientBuffers[it->getID()].find('\n')) != std::string::npos) {
+                        std::string message = clientBuffers[it->getID()].substr(0, pos);
+                        clientBuffers[it->getID()].erase(0, pos + 1); // Remove processed message from buffer
 
-                    // Check if the received data is a JSON array
-                    if (j.is_array()) {
-                        // Iterate over each element in the JSON array
-                        for (const auto& element : j) {
-                            // Check if the element is a JSON object
-                            if (element.is_object()) {
-                                // Access the properties of the JSON object
-                                int clientID = element["ClientID"];
-                                int x = element["X"];
-                                int y = element["Y"];
-
-                                // Process the received data as needed
-                                std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
-                                sendNewPositionsToAll(clientID, x, y);
-                            }
-                            else {
-                                std::cerr << "Unexpected data type in JSON array" << std::endl;
-                            }
+                        json j = json::parse(message);
+                        if (j.is_object()) {
+                            int x = j["X"];
+                            int y = j["Y"];
+                            std::cout << "ClientID: " << it->getID() << ", X: " << x << ", Y: " << y << std::endl;
+                            sendNewPositionsToAll(it->getID(), x, y);
                         }
-                    }
-                    else {
-                        std::cerr << "Received data is not a JSON array" << std::endl;
                     }
                 }
                 catch (json::parse_error& e) {
+                    // If parsing fails, it might be due to incomplete data. Do not clear the buffer.
+                    // Instead, wait for more data to arrive.
                     std::cerr << "JSON parse error: " << e.what() << std::endl;
-                    std::cerr << "Raw data: " << buffer << std::endl;
                 }
                 catch (json::type_error& e) {
                     std::cerr << "JSON type error: " << e.what() << std::endl;

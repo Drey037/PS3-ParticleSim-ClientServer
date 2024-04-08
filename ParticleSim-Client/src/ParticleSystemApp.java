@@ -119,10 +119,8 @@ public class ParticleSystemApp extends JFrame {
                 character.move(dx, dy);
                 particlePanel.repaint(); // Redraw the panel to reflect the character's new position
 
-                // Only send the movement data if dx or dy is not 0 (i.e., a valid movement was made)
-                if (dx != 0 || dy != 0) {
-                    sendThread();
-                }
+                sendThread();
+
             }
         });
 
@@ -351,23 +349,28 @@ public class ParticleSystemApp extends JFrame {
                 return;
             }
 
-            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+            // Buffer to accumulate messages
+            StringBuilder messageBuffer = new StringBuilder();
 
-            JSONArray jsonArray = new JSONArray();
+            // Create a JSON object for the current position
             JSONObject positionObject = new JSONObject();
             positionObject.put("ClientID", character.getId());
             positionObject.put("X", character.getX());
             positionObject.put("Y", character.getY());
-            jsonArray.put(positionObject);
 
-            String jsonString = jsonArray.toString();
-            out.println(jsonString);
+            // Append the JSON object to the buffer
+            messageBuffer.append(positionObject.toString());
+
+            // Send the buffered message to the server
+            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+            out.println(messageBuffer.toString());
         } catch (IOException e) {
             e.printStackTrace();
         } catch (JSONException e) {
             e.printStackTrace();
         }
     }
+
 
 
     public void closeSocket() {
