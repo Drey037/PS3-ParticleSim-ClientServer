@@ -120,17 +120,11 @@ public class ParticlePanel extends JPanel {
         for (Ghost buddy: Buddies) {
             int ghostX = buddy.getX() - cameraX;
             int ghostY = HEIGHT - buddy.getY() - cameraY;
-            Boolean buddyIsLeft = buddy.getIsLeft();
 
             if (ghostX >= 0 && ghostX < COL && ghostY >= 0 && ghostY < ROW) {
                 int ghostXZoom = ghostX * ZOOMX;
                 int ghostYZoom = ghostY * ZOOMY;
-                if (buddyIsLeft) {
-                    g.drawImage(texture_left, ghostXZoom, ghostYZoom, CHAR_MAP_WIDTH, CHAR_MAP_HEIGHT, null);
-                }
-                else {
-                    g.drawImage(texture_right, ghostXZoom, ghostYZoom, CHAR_MAP_WIDTH, CHAR_MAP_HEIGHT, null);
-                }
+                character.drawBuddy(g, ghostXZoom, ghostYZoom); // Use the transformed Graphics2D object
             }
         }
 
