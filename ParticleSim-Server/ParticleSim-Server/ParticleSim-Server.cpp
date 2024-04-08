@@ -184,25 +184,14 @@ void receiveMessages() {
             int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
 
             if (bytesReceived > 0) {
+                std::cout << "Received data: " << buffer << std::endl;
                 // Ensure the buffer is null-terminated
                 buffer[bytesReceived] = '\0';
-                std::string receivedData(buffer);
-
-                // Attempt to parse the received data immediately
+                std::string jsonString(buffer);
                 try {
-                    json j = json::parse(receivedData);
-                    if (j.is_object()) {
-                        int x = j["X"];
-                        int y = j["Y"];
-                        std::cout << "ClientID: " << it->getID() << ", X: " << x << ", Y: " << y << std::endl;
+                    // Parse the received JSON string
+                    json j = json::parse(jsonString);
 
-<<<<<<< Updated upstream
-                        // Update the client's position in the clients list
-                        it->setX(x);
-                        it->setY(y);
-
-                        sendNewPositionsToAll(it->getID(), x, y);
-=======
                     // Check if the received data is a JSON object
                     if (j.is_object()) {
                         // Access the properties of the JSON object
@@ -220,15 +209,17 @@ void receiveMessages() {
                     }
                     else {
                         std::cerr << "Received data is not a JSON object" << std::endl;
->>>>>>> Stashed changes
                     }
                 }
                 catch (json::parse_error& e) {
                     std::cerr << "JSON parse error: " << e.what() << std::endl;
+                    std::cerr << "Raw data: " << buffer << std::endl;
                 }
                 catch (json::type_error& e) {
                     std::cerr << "JSON type error: " << e.what() << std::endl;
                 }
+
+                ++it; // Increment the iterator only if the client is still connected
             }
             else if (bytesReceived == 0) {
                 // Handle the case where a client connection is closed
@@ -243,6 +234,7 @@ void receiveMessages() {
         }
     }
 }
+
 
 
 
