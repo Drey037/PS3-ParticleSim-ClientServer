@@ -7,6 +7,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.*;
+import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.List;
 
@@ -377,6 +378,19 @@ public class ParticleSystemApp extends JFrame {
                 System.out.println("Socket is closed. Cannot send data.");
                 return;
             }
+
+            // Get the socket's channel
+            SocketChannel socketChannel = socket.getChannel();
+
+            // Check if the channel is null (i.e., the socket was not created via a channel)
+            if (socketChannel == null) {
+                // If the channel is null, you cannot set the socket to non-blocking mode
+                System.out.println("Socket was not created via a channel. Cannot set to non-blocking mode.");
+                return;
+            }
+
+            // Set the channel to non-blocking mode
+            socketChannel.configureBlocking(false);
 
             PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
