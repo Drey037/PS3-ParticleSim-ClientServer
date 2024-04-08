@@ -189,71 +189,100 @@ void sendNewPositionsToAll(int clientID, int newX, int newY) {
             send(client.getSocket(), data, dataLength, 0);
     }
 }
+void processReceivedData(const std::string& data, std::list<Ghost>::iterator& it) {
+    std::cout << "Received data: " << data << std::endl;
+    try {
+        json j = json::parse(data);
+
+        if (j.is_array()) {
+            for (const auto& element : j) {
+                if (element.is_object()) {
+                    int clientID = element["ClientID"];
+                    int x = element["X"];
+                    int y = element["Y"];
+                    it->setX(x);
+                    it->setY(y);
+                    std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
+                    sendNewPositionsToAll(clientID, x, y);
+                }
+                else {
+                    std::cerr << "Unexpected data type in JSON array" << std::endl;
+                }
+            }
+        }
+        else {
+            std::cerr << "Received data is not a JSON array" << std::endl;
+        }
+    }
+    catch (json::parse_error& e) {
+        std::cerr << "JSON parse error: " << e.what() << std::endl;
+        std::cerr << "Raw data: " << data << std::endl;
+    }
+    catch (json::type_error& e) {
+        std::cerr << "JSON type error: " << e.what() << std::endl;
+    }
+}
 
 
 // Function to handle receiving messages from clients
 void receiveMessages() {
+    fd_set readfds;
+    struct timeval timeout;
+
     while (true) {
-        for (auto it = clients.begin(); it != clients.end(); /* no increment here */) {
-            char buffer[1024] = { 0 };
-            int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
-
-            if (bytesReceived > 0) {
-                std::cout << "Received data: " << buffer << std::endl;
-                // Ensure the buffer is null-terminated
-                buffer[bytesReceived] = '\0';
-                std::string jsonString(buffer);
-                try {
-                    // Parse the received JSON string
-                    json j = json::parse(jsonString);
-
-                    // Check if the received data is a JSON array
-                    if (j.is_array()) {
-                        // Iterate over each element in the JSON array
-                        for (const auto& element : j) {
-                            // Check if the element is a JSON object
-                            if (element.is_object()) {
-                                // Access the properties of the JSON object
-                                int clientID = element["ClientID"];
-                                int x = element["X"];
-                                int y = element["Y"];
-
-                                // Update the client's position in the clients list
-                                it->setX(x);
-                                it->setY(y);
-
-                                // Process the received data as needed
-                                std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
-                                sendNewPositionsToAll(clientID, x, y);
-                            }
-                            else {
-                                std::cerr << "Unexpected data type in JSON array" << std::endl;
-                            }
-                        }
-                    }
-                    else {
-                        std::cerr << "Received data is not a JSON array" << std::endl;
-                    }
-                }
-                catch (json::parse_error& e) {
-                    std::cerr << "JSON parse error: " << e.what() << std::endl;
-                    std::cerr << "Raw data: " << buffer << std::endl;
-                }
-                catch (json::type_error& e) {
-                    std::cerr << "JSON type error: " << e.what() << std::endl;
-                }
-
-                ++it; // Increment the iterator only if the client is still connected
+        FD_ZERO(&readfds); // Reset the set before each iteration
+        int maxSocket = -1;
+        for (auto& client : clients) {
+            SOCKET sock = client.getSocket();
+            if (sock == INVALID_SOCKET) {
+                std::cerr << "Invalid socket encountered." << std::endl;
+                continue; // Skip adding invalid sockets to the fd_set
             }
-            else if (bytesReceived == 0) {
-                // Handle the case where a client connection is closed
-                std::cout << "Client with ID " << it->getID() << " disconnected" << std::endl;
-                it = clients.erase(it); // Correctly remove the disconnected client and get the next valid iterator
+            FD_SET(sock, &readfds); // Add the socket to the set
+            if (sock > maxSocket) {
+                maxSocket = sock;
+            }
+        }
+
+        // Set a timeout to prevent `select` from blocking indefinitely
+        timeout.tv_sec = 1;  // 1 second
+        timeout.tv_usec = 0;  // 0 microseconds
+
+        int activity = select(maxSocket + 1, &readfds, nullptr, nullptr, &timeout);
+        if (activity < 0) {
+            int error = WSAGetLastError();
+            if (error != WSAEINVAL) { // Ignore WSAEINVAL error
+                std::cerr << "Select error: " << error << std::endl;
+            }
+            continue;
+        }
+        else if (activity == 0) {
+            // No activity, continue to the next iteration
+            continue;
+        }
+
+        for (auto it = clients.begin(); it != clients.end();) {
+            SOCKET clientSocket = it->getSocket();
+            if (FD_ISSET(clientSocket, &readfds)) {
+                char buffer[1024] = { 0 };
+                int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+                if (bytesReceived > 0) {
+                    buffer[bytesReceived] = '\0';
+                    processReceivedData(buffer, it);
+                    ++it;
+                }
+                else if (bytesReceived == 0) {
+                    std::cout << "Client disconnected, closing socket." << std::endl;
+                    closesocket(clientSocket);  // Close the socket
+                    it = clients.erase(it);     // Remove the client from the list
+                }
+                else {
+                    std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
+                    ++it;
+                }
             }
             else {
-                // Handle other errors
-                std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
-                ++it; // Increment the iterator to continue with the next client
+                ++it;
             }
         }
     }

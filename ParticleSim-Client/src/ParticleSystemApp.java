@@ -389,14 +389,15 @@ public class ParticleSystemApp extends JFrame {
             jsonArray.put(positionObject);
 
             String jsonString = jsonArray.toString();
-            out.println(jsonString);
+            out.println(jsonString);  // Sending the JSON string to the server
         } catch (IOException e) {
+            System.err.println("IO Exception while sending data: " + e.getMessage());
             e.printStackTrace();
         } catch (JSONException e) {
+            System.err.println("JSON Exception while creating data: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
 
     public void closeSocket() {
         if (!isSocketClosed) {
