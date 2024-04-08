@@ -204,6 +204,10 @@ void receiveMessages() {
                                 int x = element["X"];
                                 int y = element["Y"];
 
+                                // Update the client's position in the clients list
+                                it->setX(x);
+                                it->setY(y);
+
                                 // Process the received data as needed
                                 std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
                                 sendNewPositionsToAll(clientID, x, y);
