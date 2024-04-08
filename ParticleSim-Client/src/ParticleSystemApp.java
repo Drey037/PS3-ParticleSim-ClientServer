@@ -95,33 +95,37 @@ public class ParticleSystemApp extends JFrame {
             @Override
             public void keyPressed(KeyEvent e) {
                 int dx = 0, dy = 0;
+                boolean moved = false; // Flag to track if the character has moved
 
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_W:
                     case KeyEvent.VK_UP:
-                        dy = 1;
+                        dy = -1;  // Assuming up is negative Y
+                        moved = true;
                         break;
                     case KeyEvent.VK_S:
                     case KeyEvent.VK_DOWN:
-                        dy = -1;
+                        dy = 1;  // Assuming down is positive Y
+                        moved = true;
                         break;
                     case KeyEvent.VK_A:
                     case KeyEvent.VK_LEFT:
                         dx = -1;
                         character.turnChar(true);
+                        moved = true;
                         break;
                     case KeyEvent.VK_D:
                     case KeyEvent.VK_RIGHT:
                         dx = 1;
                         character.turnChar(false);
+                        moved = true;
                         break;
                 }
-                character.move(dx, dy);
-                particlePanel.repaint(); // Redraw the panel to reflect the character's new position
 
-                // Only send the movement data if dx or dy is not 0 (i.e., a valid movement was made)
-                if (dx != 0 || dy != 0) {
-                    sendThread();
+                if (moved) {
+                    character.move(dx, dy);
+                    particlePanel.repaint(); // Redraw the panel to reflect the character's new position
+                    sendThread();  // Send the movement data
                 }
             }
         });
