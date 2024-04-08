@@ -380,14 +380,9 @@ public class ParticleSystemApp extends JFrame {
             }
 
             // Get the socket's channel
-            SocketChannel socketChannel = socket.getChannel();
-
-            // Check if the channel is null (i.e., the socket was not created via a channel)
-            if (socketChannel == null) {
-                // If the channel is null, you cannot set the socket to non-blocking mode
-                System.out.println("Socket was not created via a channel. Cannot set to non-blocking mode.");
-                return;
-            }
+            SocketChannel socketChannel = SocketChannel.open();
+            socketChannel.connect(new InetSocketAddress("localhost", 80));
+            Socket socket = socketChannel.socket();
 
             // Set the channel to non-blocking mode
             socketChannel.configureBlocking(false);
