@@ -123,7 +123,7 @@ void listenForClients(SOCKET serverSocket) {
             Ghost& newClient = clients.back(); // Get a reference to the newly added client
             std::cout << "Client ID: " << newClient.getID() << " connected\n"; // Print the client ID
 
-            // Send a welcome
+            // Send a welcome message
             json j;
             j.push_back({ {"Type", 0} });
             j.push_back({ {"ID", newClient.getID()} }); // Use the new client's ID
@@ -135,30 +135,36 @@ void listenForClients(SOCKET serverSocket) {
 
             int bytesSent = send(clientSocket, data, dataLength, 0);
             if (bytesSent == SOCKET_ERROR) {
-                std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
+                std::cerr << "Error sending welcome message: " << WSAGetLastError() << std::endl;
                 closesocket(serverSocket);
                 WSACleanup();
+                continue;
             }
-            // clientWelcome(clientSocket);
-            std::cout << "Sent welcome !\n";
+            std::cout << "Sent welcome message!\n";
 
-            // Send existing particles to the newly connected client
-            std::lock_guard<std::mutex> lock(particleListLock); // Ensure thread safety
-            for (const auto& batch : particleBatchList) {
-                const ParticleBatch& batchDef = *batch;
-                std::vector<Particle> particles = batchDef.getParticles();
-                std::string serializedParticles = serializeParticles(particles, batchDef.getID());
-                const char* particleData = serializedParticles.c_str();
-                size_t particleDataLength = serializedParticles.size();
+            // Prepare and store particle data to be sent to the new client
+            std::vector<std::string> pendingParticleData;
+            {
+                std::lock_guard<std::mutex> lock(particleListLock); // Ensure thread safety
+                for (const auto& batch : particleBatchList) {
+                    const ParticleBatch& batchDef = *batch;
+                    std::vector<Particle> particles = batchDef.getParticles();
+                    std::string serializedParticles = serializeParticles(particles, batchDef.getID());
+                    pendingParticleData.push_back(serializedParticles);
+                }
+            }
 
-                int bytesSentToNewClient = send(clientSocket, particleData, particleDataLength, 0);
+            // Send pending particle data to the new client
+            for (const auto& particleData : pendingParticleData) {
+                size_t particleDataLength = particleData.size();
+                int bytesSentToNewClient = send(clientSocket, particleData.c_str(), particleDataLength, 0);
                 if (bytesSentToNewClient == SOCKET_ERROR) {
                     std::cerr << "Error sending particle data to new client: " << WSAGetLastError() << std::endl;
                     closesocket(serverSocket);
                     WSACleanup();
+                    break; // Exit the loop to avoid sending further data on error
                 }
             }
-
         }
     }
 }
