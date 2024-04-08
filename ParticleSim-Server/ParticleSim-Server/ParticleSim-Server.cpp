@@ -195,6 +195,11 @@ void receiveMessages() {
                         int x = j["X"];
                         int y = j["Y"];
                         std::cout << "ClientID: " << it->getID() << ", X: " << x << ", Y: " << y << std::endl;
+
+                        // Update the client's position in the clients list
+                        it->setX(x);
+                        it->setY(y);
+
                         sendNewPositionsToAll(it->getID(), x, y);
                     }
                 }
@@ -218,6 +223,7 @@ void receiveMessages() {
         }
     }
 }
+
 
 
 

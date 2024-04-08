@@ -26,3 +26,12 @@ int Ghost::getY() const { // Declare as const
 int Ghost::getID() const {
     return id;
 }
+
+// Add setX and setY methods
+void Ghost::setX(int newX) {
+    x = newX;
+}
+
+void Ghost::setY(int newY) {
+    y = newY;
+}

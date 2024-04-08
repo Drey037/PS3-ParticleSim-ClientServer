@@ -15,6 +15,10 @@ public:
     int getID() const; 
     static int currentID;
 
+    // Add setX and setY methods
+    void setX(int newX);
+    void setY(int newY);
+
 private:
     int x, y;
     bool isLeft;
