@@ -35,6 +35,7 @@ ImVec4 wallColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 particleColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 std::vector<std::unique_ptr<ParticleBatch>> particleBatchList;
+std::vector<std::string> allParticleStringList;
 std::mutex particleListLock;
 std::list<Ghost> clients;
 //std::vector<Ghost> clients;
@@ -65,7 +66,6 @@ void InitImGui(GLFWwindow* window) {
 
 // -------------------------------------- SERVER STUFF -------------------------------------------------
 
-
 // This function is used to turn Coordinates into JSON
 std::string serializeParticles(const std::vector <Particle>& particles, int batchID) {
     json j;
@@ -78,7 +78,20 @@ std::string serializeParticles(const std::vector <Particle>& particles, int batc
     return serializedJson;
 }
 
+// For client welcome, sends all needed particles
+void clientWelcome(SOCKET socket) {
+    for (auto& batch : allParticleStringList) {
+        const char* data = batch.c_str();
+        size_t dataLength = batch.size();
 
+        int bytesSent = send(socket, data, dataLength, 0);
+        if (bytesSent == SOCKET_ERROR) {
+            std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
+            closesocket(serverSocket);
+            WSACleanup();
+        }
+    }
+}
 
  //This function is used to turn the json into string to be sent
 void sendCoordinates(const std::string& serializedCoordinates) {
@@ -126,6 +139,7 @@ void listenForClients(SOCKET serverSocket) {
                 closesocket(serverSocket);
                 WSACleanup();
             }
+            // clientWelcome(clientSocket);
             std::cout << "Sent welcome !\n";
 
             // Send existing particles to the newly connected client
@@ -162,9 +176,8 @@ void removeClient(int clientID) {
 void sendNewPositionsToAll(int clientID, int newX, int newY) {
     json j;
     j.push_back({ {"Type", 1} });
-    for (const auto& client : clients) {
-        j.push_back({ {"ClientID", client.getID()}, {"X", client.getX()}, {"Y", client.getY()} });
-    }
+    j.push_back({ {"ClientID", clientID}, {"X", newX}, {"Y", newY} });
+
     std::string serializedJson = j.dump();
     serializedJson += '\n'; // Add newline character at the end
 
@@ -172,7 +185,8 @@ void sendNewPositionsToAll(int clientID, int newX, int newY) {
     size_t dataLength = serializedJson.size();
 
     for (auto& client : clients) {
-        send(client.getSocket(), data, dataLength, 0);
+        if (client.getID() != clientID)
+            send(client.getSocket(), data, dataLength, 0);
     }
 }
 
