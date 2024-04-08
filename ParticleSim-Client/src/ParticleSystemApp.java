@@ -37,6 +37,7 @@ public class ParticleSystemApp extends JFrame {
 
     private ObjectOutputStream out;
     private BufferedReader in;
+    private volatile boolean positionChanged = false;
     public ParticleSystemApp() {
         // Window Initialization
         setTitle("Particle Simulation Client");
@@ -90,7 +91,6 @@ public class ParticleSystemApp extends JFrame {
             }
         });
 
-
         addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
@@ -100,12 +100,12 @@ public class ParticleSystemApp extends JFrame {
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_W:
                     case KeyEvent.VK_UP:
-                        dy = -1;  // Assuming up is negative Y
+                        dy = 1;
                         moved = true;
                         break;
                     case KeyEvent.VK_S:
                     case KeyEvent.VK_DOWN:
-                        dy = 1;  // Assuming down is positive Y
+                        dy = -1;
                         moved = true;
                         break;
                     case KeyEvent.VK_A:
@@ -125,10 +125,23 @@ public class ParticleSystemApp extends JFrame {
                 if (moved) {
                     character.move(dx, dy);
                     particlePanel.repaint(); // Redraw the panel to reflect the character's new position
-                    sendThread();  // Send the movement data
+                    positionChanged = true;
                 }
             }
         });
+        new Thread(() -> {
+            while (true) {
+                if (positionChanged) {
+                    sendThread(); // Send the position update
+                    positionChanged = false; // Reset the flag after sending the update
+                }
+                try {
+                    Thread.sleep(100); // Adjust the sleep time as needed
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
 
         // Start gamelogic thread
         new Thread(this::gameLoop).start();
