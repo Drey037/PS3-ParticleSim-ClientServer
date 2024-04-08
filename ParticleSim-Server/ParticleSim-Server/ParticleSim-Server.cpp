@@ -196,11 +196,31 @@ void receiveMessages() {
                         int y = j["Y"];
                         std::cout << "ClientID: " << it->getID() << ", X: " << x << ", Y: " << y << std::endl;
 
+<<<<<<< Updated upstream
                         // Update the client's position in the clients list
                         it->setX(x);
                         it->setY(y);
 
                         sendNewPositionsToAll(it->getID(), x, y);
+=======
+                    // Check if the received data is a JSON object
+                    if (j.is_object()) {
+                        // Access the properties of the JSON object
+                        int clientID = j["ClientID"];
+                        int x = j["X"];
+                        int y = j["Y"];
+
+                        // Update the client's position in the clients list
+                        it->setX(x);
+                        it->setY(y);
+
+                        // Process the received data as needed
+                        std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
+                        sendNewPositionsToAll(clientID, x, y);
+                    }
+                    else {
+                        std::cerr << "Received data is not a JSON object" << std::endl;
+>>>>>>> Stashed changes
                     }
                 }
                 catch (json::parse_error& e) {

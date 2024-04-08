@@ -120,8 +120,13 @@ public class ParticleSystemApp extends JFrame {
                 character.move(dx, dy);
                 particlePanel.repaint(); // Redraw the panel to reflect the character's new position
 
+<<<<<<< Updated upstream
                 // Send the updated position to the server
                 sendThread();
+=======
+                sendThread();
+
+>>>>>>> Stashed changes
             }
         });
 
@@ -226,7 +231,6 @@ public class ParticleSystemApp extends JFrame {
                 InputStream inputStream = socket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
                 String serializedCoordinates = reader.readLine(); // Assuming each message is a single line
-                System.out.println("\nReceived data: " + serializedCoordinates + "\n");
 
                 // Check if the end of the stream has been reached
                 if (serializedCoordinates == null) {
@@ -351,18 +355,30 @@ public class ParticleSystemApp extends JFrame {
                 return;
             }
 
+<<<<<<< Updated upstream
             // Create a JSON object for the current position
+=======
+            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+
+            // Create a JSONObject directly instead of a JSONArray
+>>>>>>> Stashed changes
             JSONObject positionObject = new JSONObject();
             positionObject.put("ClientID", character.getId());
             positionObject.put("X", character.getX());
             positionObject.put("Y", character.getY());
 
+<<<<<<< Updated upstream
             // Convert the JSON object to a string
             String message = positionObject.toString();
 
             // Send the message to the server
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             out.println(message);
+=======
+            // Convert the JSONObject to a string
+            String jsonString = positionObject.toString();
+            out.println(jsonString);
+>>>>>>> Stashed changes
         } catch (IOException e) {
             e.printStackTrace();
         } catch (JSONException e) {
