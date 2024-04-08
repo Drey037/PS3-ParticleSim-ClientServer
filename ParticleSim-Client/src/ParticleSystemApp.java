@@ -6,8 +6,8 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.*;
-import java.net.Socket;
-import java.net.URL;
+import java.net.*;
+import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.List;
 
@@ -34,9 +34,11 @@ public class ParticleSystemApp extends JFrame {
     private Image texture_right;
 
     private static Socket socket;
+    private boolean isSocketClosed = false;
 
     private ObjectOutputStream out;
     private BufferedReader in;
+    private volatile boolean positionChanged = false;
     public ParticleSystemApp() {
         // Window Initialization
         setTitle("Particle Simulation Client");
@@ -83,15 +85,8 @@ public class ParticleSystemApp extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                // Perform cleanup tasks here
                 System.out.println("Closing connection to the server...");
-                try {
-                    if (socket != null && !socket.isClosed()) {
-                        socket.close(); // Close the socket connection
-                    }
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                }
+                closeSocket(); // Use the method to close the socket
                 System.out.println("Connection to the server closed.");
                 System.exit(0); // Exit the application
             }
@@ -101,36 +96,54 @@ public class ParticleSystemApp extends JFrame {
             @Override
             public void keyPressed(KeyEvent e) {
                 int dx = 0, dy = 0;
+                boolean moved = false; // Flag to track if the character has moved
 
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_W:
                     case KeyEvent.VK_UP:
                         dy = 1;
-                        //System.out.println("UP");
+                        moved = true;
                         break;
                     case KeyEvent.VK_S:
                     case KeyEvent.VK_DOWN:
                         dy = -1;
-                        //System.out.println("RIGHT");
+                        moved = true;
                         break;
                     case KeyEvent.VK_A:
                     case KeyEvent.VK_LEFT:
                         dx = -1;
                         character.turnChar(true);
-                        //System.out.println("LEFT");
+                        moved = true;
                         break;
                     case KeyEvent.VK_D:
                     case KeyEvent.VK_RIGHT:
                         dx = 1;
                         character.turnChar(false);
-                        //System.out.println("DOWN");
+                        moved = true;
                         break;
                 }
-                character.move(dx, dy);
-                sendThread();
-                particlePanel.repaint(); // Redraw the panel to reflect the character's new position
+
+                if (moved) {
+                    character.move(dx, dy);
+                    particlePanel.repaint(); // Redraw the panel to reflect the character's new position
+                    sendThread(); // Send the position update immediately
+                }
             }
         });
+        new Thread(() -> {
+            while (true) {
+                if (positionChanged) {
+                    sendThread(); // Send the position update
+                    positionChanged = false; // Reset the flag after sending the update
+                }
+                try {
+                    Thread.sleep(100); // Adjust the sleep time as needed
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+
         // Start gamelogic thread
         new Thread(this::gameLoop).start();
     }
@@ -202,9 +215,9 @@ public class ParticleSystemApp extends JFrame {
         try {
             // Socket
 
-            // SERVER_IP = input
-            String address = "localhost"; // TEMPORARY
-            //InetAddress address = InetAddress.getByName(SERVER_IP); // Enter host ip address
+            String SERVER_IP = input;
+            // String address = "localhost"; // TEMPORARY
+            InetAddress address = InetAddress.getByName(SERVER_IP); // Enter host ip address
             int CLIENT_PORT = 12345;
 
             socket = new Socket(address, CLIENT_PORT);
@@ -231,6 +244,13 @@ public class ParticleSystemApp extends JFrame {
                 InputStream inputStream = socket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
                 String serializedCoordinates = reader.readLine(); // Assuming each message is a single line
+                System.out.println("\nReceived data: " + serializedCoordinates + "\n");
+
+                // Check if the end of the stream has been reached
+                if (serializedCoordinates == null) {
+                    System.out.println("Server has closed the connection. Exiting receiveThread.");
+                    break; // Exit the loop if the server has closed the connection
+                }
 
                 JSONArray jsonArray = new JSONArray(serializedCoordinates);
                 // Get the type of message
@@ -249,7 +269,7 @@ public class ParticleSystemApp extends JFrame {
                             case 0: // Welcome
                                 int self_id = jsonObject.getInt("ID");
                                 character.setID(self_id);
-                                System.out.println(character.getId());
+                                System.out.println("Client is registered as ID " + character.getId());
 
                                 break;
                             case 1: // Received buddy client coordinates
@@ -257,9 +277,23 @@ public class ParticleSystemApp extends JFrame {
                                 int clientY = jsonObject.getInt("Y");
                                 int id = jsonObject.getInt("ClientID");
 
-                                for (Ghost buddy: Buddies) {
-                                    if (buddy.getId() == id)
+                                // Print the buddy's client ID and details
+                                System.out.println("Buddy Client ID: " + id + ", X: " + clientX + ", Y: " + clientY);
+
+                                boolean buddyFound = false;
+                                for (Ghost buddy : Buddies) {
+                                    if (buddy.getId() == id) {
                                         buddy.updatePos(clientX, clientY);
+                                        buddyFound = true;
+                                        break; // Exit the loop once the buddy is found and updated
+                                    }
+                                }
+
+                                if (!buddyFound) {
+                                    // If the buddy was not found, append a new buddy to the list
+                                    Ghost newBud = new Ghost(clientX, clientY, texture_left, texture_right);
+                                    newBud.setID(id);
+                                    Buddies.add(newBud);
                                 }
                                 break;
 
@@ -303,12 +337,15 @@ public class ParticleSystemApp extends JFrame {
 
                 // If end then break
                 // running = false; // Uncomment to break the loop based on a condition
-            } catch (IOException e) {
-                if (e.getMessage().contains("Socket closed")) {
-                    System.out.println("Socket closed. Exiting receiveThread.");
+            } catch (SocketException e) {
+                if (e.getMessage().contains("Connection reset")) {
+                    System.out.println("Server has abruptly closed the connection. Exiting receiveThread.");
                 } else {
-                    e.printStackTrace(); // Handle other IOExceptions as needed
+                    e.printStackTrace(); // Handle other SocketExceptions as needed
                 }
+                break;
+            } catch (IOException e) {
+                e.printStackTrace(); // Handle other IOExceptions as needed
                 break;
             } catch (JSONException e) {
                 e.printStackTrace(); // Or handle the exception as needed
@@ -317,27 +354,62 @@ public class ParticleSystemApp extends JFrame {
             }
         }
 
+        // Close resources properly
+        try {
+            if (in != null) in.close();
+            if (out != null) out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         System.out.println("Broke out of the loop");
+
+        // Close the client window and exit the application
+        System.out.println("Server has closed the connection. Closing the client window.");
+        SwingUtilities.invokeLater(() -> {
+            ParticleSystemApp.this.dispose(); // Close the JFrame
+            System.exit(0); // Exit the application
+        });
     }
 
     public void sendThread() {
         try {
+            if (socket.isClosed()) {
+                System.out.println("Socket is closed. Cannot send data.");
+                return;
+            }
+
             PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
-            JSONObject jsonObject = new JSONObject();
-            jsonObject.put("ClientID", character.getId());
-            jsonObject.put("X", character.getX());
-            jsonObject.put("Y", character.getY());
+            JSONArray jsonArray = new JSONArray();
+            JSONObject positionObject = new JSONObject();
+            positionObject.put("ClientID", character.getId());
+            positionObject.put("X", character.getX());
+            positionObject.put("Y", character.getY());
+            jsonArray.put(positionObject);
 
-            String jsonString = jsonObject.toString();
-            out.println(jsonString);
-            // running = false; // Uncomment to break the loop based on a condition
+            String jsonString = jsonArray.toString();
+            out.println(jsonString);  // Sending the JSON string to the server
         } catch (IOException e) {
-            e.printStackTrace(); // Or handle the exception as needed
-            // Handle the exception as needed, possibly by breaking out of the loop
+            System.err.println("IO Exception while sending data: " + e.getMessage());
+            e.printStackTrace();
         } catch (JSONException e) {
-            e.printStackTrace(); // Or handle the exception as needed
-            // Handle the exception as needed
+            System.err.println("JSON Exception while creating data: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public void closeSocket() {
+        if (!isSocketClosed) {
+            try {
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                isSocketClosed = true;
+            }
         }
     }
 

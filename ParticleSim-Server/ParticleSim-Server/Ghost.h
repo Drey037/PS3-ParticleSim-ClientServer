@@ -10,10 +10,15 @@ public:
     Ghost(int x, int y, SOCKET socket);
     void turnChar(bool isLeft);
     SOCKET getSocket();
-    int getX();
-    int getY();
+    int getX() const; // Declare as const
+    int getY() const; // Declare as const
     int getID() const; 
     static int currentID;
+
+    // Add setX and setY methods
+    void setX(int newX);
+    void setY(int newY);
+
 
 private:
     int x, y;

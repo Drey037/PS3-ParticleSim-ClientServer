@@ -47,17 +47,14 @@ public class Ghost {
         }
     }
 
-    public void draw(Graphics g) {
-        // 39x35 small
+    public void drawBuddy(Graphics g, int X, int Y) {
+        // 39x37
         if (isLeft)
-            g.drawImage(texture_left, x, translateY(y), CHAR_WIDTH, CHAR_HEIGHT, null);
+            g.drawImage(texture_left, X, Y, CHAR_MAP_WIDTH, CHAR_MAP_HEIGHT, null);
         else
-            g.drawImage(texture_right, x, translateY(y), CHAR_WIDTH, CHAR_HEIGHT, null);
+            g.drawImage(texture_right, X, Y, CHAR_MAP_WIDTH, CHAR_MAP_HEIGHT, null);
     }
-
-    private int translateY(int y) {
-        return (720 - CHAR_HEIGHT) - y; //minus the height
-    }
+    
 
     public void drawMap(Graphics g) {
         if (isLeft) {

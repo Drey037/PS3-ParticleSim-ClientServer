@@ -96,6 +96,22 @@ public class ParticlePanel extends JPanel {
         g2d.setColor(Color.WHITE);
         g2d.fillRect(0, 0, getWidth(), getHeight());
 
+        for (ParticleBatch batch : particleBatchList) {
+            ArrayList<Particle> particleList = batch.getParticles(); // Thread-safe snapshot
+            for (Particle particle : particleList) {
+                int pX = particle.getX() - cameraX;
+                int pY = HEIGHT - particle.getY() - cameraY;
+
+                if (pX >= 0 && pX < COL && pY >= 0 && pY < ROW) {
+                    pX = pX * ZOOMX;
+                    pY = pY * ZOOMY;
+                    g.setColor(particle.getColor());
+                    g.fillOval(pX, pY, particle.getSize() * 4, particle.getSize() * 4);
+                }
+            }
+        }
+
+
         // Draw particles
         for (ParticleBatch batch : particleBatchList) {
             ArrayList<Particle> particleList = batch.getParticles();
@@ -125,12 +141,7 @@ public class ParticlePanel extends JPanel {
             if (ghostX >= 0 && ghostX < COL && ghostY >= 0 && ghostY < ROW) {
                 int ghostXZoom = ghostX * ZOOMX;
                 int ghostYZoom = ghostY * ZOOMY;
-                if (buddyIsLeft) {
-                    g.drawImage(texture_left, ghostXZoom, ghostYZoom, CHAR_MAP_WIDTH, CHAR_MAP_HEIGHT, null);
-                }
-                else {
-                    g.drawImage(texture_right, ghostXZoom, ghostYZoom, CHAR_MAP_WIDTH, CHAR_MAP_HEIGHT, null);
-                }
+                character.drawBuddy(g, ghostXZoom, ghostYZoom);
             }
         }
 

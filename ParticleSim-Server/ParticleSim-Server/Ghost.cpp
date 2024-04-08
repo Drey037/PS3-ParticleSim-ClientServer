@@ -15,14 +15,22 @@ SOCKET Ghost::getSocket() {
     return socket;
 }
 
-int Ghost::getX() {
+int Ghost::getX() const { // Declare as const
     return x;
 }
 
-int Ghost::getY() {
+int Ghost::getY() const { // Declare as const
     return y;
 }
 
 int Ghost::getID() const {
     return id;
+}
+
+void Ghost::setX(int newX) {
+    x = newX;
+}
+
+void Ghost::setY(int newY) {
+    y = newY;
 }

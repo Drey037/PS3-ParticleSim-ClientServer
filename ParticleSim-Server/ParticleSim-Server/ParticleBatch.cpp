@@ -15,9 +15,10 @@ ParticleBatch::ParticleBatch() : numParticles(0), batchID(++currentID)  {
     
 }
 
-std::vector<Particle>& ParticleBatch::getParticles() {
+const std::vector<Particle>& ParticleBatch::getParticles() const {
     return particles;
 }
+
 
 int ParticleBatch::getNumParticles() const {
     return particles.size();
@@ -37,7 +38,7 @@ void ParticleBatch::clearParticles() {
     numParticles = 0;
 }
 
-int ParticleBatch::getID() {
+int ParticleBatch::getID() const {
     return batchID;
 }
 

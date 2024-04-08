@@ -35,18 +35,23 @@ ImVec4 wallColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 particleColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 std::vector<std::unique_ptr<ParticleBatch>> particleBatchList;
+std::vector<std::string> allParticleStringList;
 std::mutex particleListLock;
-std::vector<Ghost> clients;
+std::list<Ghost> clients;
+//std::vector<Ghost> clients;
 SOCKET serverSocket;
-const int MAX_LOAD = 10000; // Assuming MAX_LOAD is a constant
+const int MAX_LOAD = 1000; // Assuming MAX_LOAD is a constant
 
 const double MIN_VELOCITY = 5.0; // Define your minimum velocity here
-const double MAX_VELOCITY = 5000.0; // Define your maximum velocity here
+const double MAX_VELOCITY = 500.0; // Define your maximum velocity here
 const int PANEL_WIDTH = 1280; // Define your maximum velocity here
 const int PANEL_HEIGHT = 720; // Define your maximum velocity here
 int numClients;
 int ParticleBatch::currentID = 0;
 int Ghost::currentID = 0;
+
+
+
 
 // Function to initialize ImGui
 void InitImGui(GLFWwindow* window) {
@@ -61,7 +66,6 @@ void InitImGui(GLFWwindow* window) {
 
 // -------------------------------------- SERVER STUFF -------------------------------------------------
 
-
 // This function is used to turn Coordinates into JSON
 std::string serializeParticles(const std::vector <Particle>& particles, int batchID) {
     json j;
@@ -74,15 +78,28 @@ std::string serializeParticles(const std::vector <Particle>& particles, int batc
     return serializedJson;
 }
 
+// For client welcome, sends all needed particles
+void clientWelcome(SOCKET socket) {
+    for (auto& batch : allParticleStringList) {
+        const char* data = batch.c_str();
+        size_t dataLength = batch.size();
 
+        int bytesSent = send(socket, data, dataLength, 0);
+        if (bytesSent == SOCKET_ERROR) {
+            std::cerr << "Error sending data: " << WSAGetLastError() << std::endl;
+            closesocket(serverSocket);
+            WSACleanup();
+        }
+    }
+}
 
- //This function is used to turn the json into string to be sent
+//This function is used to turn the json into string to be sent
 void sendCoordinates(const std::string& serializedCoordinates) {
     cout << "Sent coordinates";
     const char* data = serializedCoordinates.c_str();
     size_t dataLength = serializedCoordinates.size();
 
-    for (Ghost client: clients) {
+    for (Ghost client : clients) {
         SOCKET clientSocket = client.getSocket();
         int bytesSent = send(clientSocket, data, dataLength, 0);
         if (bytesSent == SOCKET_ERROR) {
@@ -122,34 +139,45 @@ void listenForClients(SOCKET serverSocket) {
                 closesocket(serverSocket);
                 WSACleanup();
             }
+            // clientWelcome(clientSocket);
             std::cout << "Sent welcome !\n";
+
+            // Send existing particles to the newly connected client
+            std::lock_guard<std::mutex> lock(particleListLock); // Ensure thread safety
+            for (const auto& batch : particleBatchList) {
+                const ParticleBatch& batchDef = *batch;
+                std::vector<Particle> particles = batchDef.getParticles();
+                std::string serializedParticles = serializeParticles(particles, batchDef.getID());
+                const char* particleData = serializedParticles.c_str();
+                size_t particleDataLength = serializedParticles.size();
+
+                int bytesSentToNewClient = send(clientSocket, particleData, particleDataLength, 0);
+                if (bytesSentToNewClient == SOCKET_ERROR) {
+                    std::cerr << "Error sending particle data to new client: " << WSAGetLastError() << std::endl;
+                    closesocket(serverSocket);
+                    WSACleanup();
+                }
+            }
+
         }
     }
 }
 
 
 void removeClient(int clientID) {
-    // Find the client in the vector
-    auto it = std::find_if(clients.begin(), clients.end(), [clientID](const Ghost& client) {
-        return client.getID() == clientID; // Corrected line
+    clients.remove_if([clientID](const Ghost& client) {
+        return client.getID() == clientID;
         });
-
-    // If the client was found, remove it
-    if (it != clients.end()) {
-        clients.erase(it);
-        std::cout << "Client removed successfully." << std::endl;
-    }
-    else {
-        std::cout << "Client not found." << std::endl;
-    }
 }
 
 
 
-void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
+
+void sendNewPositionsToAll(int clientID, int newX, int newY) {
     json j;
     j.push_back({ {"Type", 1} });
-    j.push_back({ {"X", newX},{"Y", newY} });
+    j.push_back({ {"ClientID", clientID}, {"X", newX}, {"Y", newY} });
+
     std::string serializedJson = j.dump();
     serializedJson += '\n'; // Add newline character at the end
 
@@ -157,64 +185,109 @@ void sendNewPositionsToAllExcept(int excludeClientID, int newX, int newY) {
     size_t dataLength = serializedJson.size();
 
     for (auto& client : clients) {
-        if (client.getID() != excludeClientID) {
-            // Send the message to the client
+        if (client.getID() != clientID)
             send(client.getSocket(), data, dataLength, 0);
-        }
     }
 }
+void processReceivedData(const std::string& data, std::list<Ghost>::iterator& it) {
+    std::cout << "Received data: " << data << std::endl;
+    try {
+        json j = json::parse(data);
+
+        if (j.is_array()) {
+            for (const auto& element : j) {
+                if (element.is_object()) {
+                    int clientID = element["ClientID"];
+                    int x = element["X"];
+                    int y = element["Y"];
+                    it->setX(x);
+                    it->setY(y);
+                    std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
+                    sendNewPositionsToAll(clientID, x, y);
+                }
+                else {
+                    std::cerr << "Unexpected data type in JSON array" << std::endl;
+                }
+            }
+        }
+        else {
+            std::cerr << "Received data is not a JSON array" << std::endl;
+        }
+    }
+    catch (json::parse_error& e) {
+        std::cerr << "JSON parse error: " << e.what() << std::endl;
+        std::cerr << "Raw data: " << data << std::endl;
+    }
+    catch (json::type_error& e) {
+        std::cerr << "JSON type error: " << e.what() << std::endl;
+    }
+}
+
 
 // Function to handle receiving messages from clients
 void receiveMessages() {
+    fd_set readfds;
+    struct timeval timeout;
+
     while (true) {
-        std::vector<int> clientsToRemove;
-        for (auto it = clients.begin(); it != clients.end(); /* no increment here */) {
-            char buffer[1024];
-            int bytesReceived = recv(it->getSocket(), buffer, sizeof(buffer), 0);
-            cout << "Here\n";
-            if (bytesReceived > 0) {
-                // Ensure the buffer is null-terminated
-                buffer[bytesReceived] = '\0';
-                std::string jsonString(buffer);
-                try {
-                    json res = json::parse(jsonString);
-                    cout << res << "\n";
-                    // Assuming the JSON contains "ClientID" as a string, and "X" and "Y" as integers
-                    int clientID = res["ClientID"];
-                    int x = res["X"];
-                    int y = res["Y"];
-
-                    // Process the parsed values as needed
-                    std::cout << "ClientID: " << clientID << ", X: " << x << ", Y: " << y << std::endl;
-                    sendNewPositionsToAllExcept(clientID, x, y);
-                }
-                catch (json::parse_error& e) {
-                    std::cerr << "JSON parse error: " << e.what() << std::endl;
-                }
-                catch (json::type_error& e) {
-                    std::cerr << "JSON type error: " << e.what() << std::endl;
-                }
-
-                ++it; // Increment the iterator only if the client is still connected
+        FD_ZERO(&readfds); // Reset the set before each iteration
+        int maxSocket = -1;
+        for (auto& client : clients) {
+            SOCKET sock = client.getSocket();
+            if (sock == INVALID_SOCKET) {
+                std::cerr << "Invalid socket encountered." << std::endl;
+                continue; // Skip adding invalid sockets to the fd_set
             }
-            else if (bytesReceived == 0) {
-                // Handle the case where a client connection is closed
-                std::cout << "Client with ID " << it->getID() << " disconnected" << std::endl;
-                clientsToRemove.push_back(it->getID()); // Mark the client for removal
-                ++it; // Increment the iterator to continue with the next client
-            }
-            else {
-                // Handle other errors
-                std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
-                ++it; // Increment the iterator to continue with the next client
+            FD_SET(sock, &readfds); // Add the socket to the set
+            if (sock > maxSocket) {
+                maxSocket = sock;
             }
         }
 
-        for (int clientID : clientsToRemove) {
-            removeClient(clientID);
+        // Set a timeout to prevent `select` from blocking indefinitely
+        timeout.tv_sec = 1;  // 1 second
+        timeout.tv_usec = 0;  // 0 microseconds
+
+        int activity = select(maxSocket + 1, &readfds, nullptr, nullptr, &timeout);
+        if (activity < 0) {
+            int error = WSAGetLastError();
+            if (error != WSAEINVAL) { // Ignore WSAEINVAL error
+                std::cerr << "Select error: " << error << std::endl;
+            }
+            continue;
+        }
+        else if (activity == 0) {
+            // No activity, continue to the next iteration
+            continue;
+        }
+
+        for (auto it = clients.begin(); it != clients.end();) {
+            SOCKET clientSocket = it->getSocket();
+            if (FD_ISSET(clientSocket, &readfds)) {
+                char buffer[1024] = { 0 };
+                int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+                if (bytesReceived > 0) {
+                    buffer[bytesReceived] = '\0';
+                    processReceivedData(buffer, it);
+                    ++it;
+                }
+                else if (bytesReceived == 0) {
+                    std::cout << "Client disconnected, closing socket." << std::endl;
+                    closesocket(clientSocket);  // Close the socket
+                    it = clients.erase(it);     // Remove the client from the list
+                }
+                else {
+                    std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
+                    ++it;
+                }
+            }
+            else {
+                ++it;
+            }
         }
     }
 }
+
 
 
 int serverStart() {
@@ -489,10 +562,10 @@ static void DrawElements() {
 
     // Draw particles
     for (auto& batch : particleBatchList) {
-        ParticleBatch& batchDef = *batch;
+        const ParticleBatch& batchDef = *batch; // Ensure batchDef is const
 
-        std::vector<Particle>& particleList = batchDef.getParticles();
-        for (Particle& particle : particleList) {
+        const std::vector<Particle>& particleList = batchDef.getParticles(); // Use const reference
+        for (const Particle& particle : particleList) { // Use const reference for particles
             ImVec2 screenPos = ImVec2(particle.getX(), 720 - particle.getY());
 
             float size = static_cast<float>(particle.getSize()); // Cast the size to float
@@ -500,6 +573,7 @@ static void DrawElements() {
         }
     }
 }
+
 
 // Function to render ImGui
 void RenderImGui(double currentFramerate) {
@@ -756,6 +830,8 @@ static void GLFWErrorCallback(int error, const char* description) {
     std::cout << "GLFW Error " << description << " code: " << error << std::endl;
 }
 
+
+
 int main() {
     serverStart();
 
@@ -770,6 +846,8 @@ int main() {
     }
 
     glfwSetErrorCallback(GLFWErrorCallback);
+
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     GLFWwindow* window = glfwCreateWindow(1540, 722, "Particle Simulator", nullptr, nullptr);
     if (!window) {
@@ -786,72 +864,40 @@ int main() {
     InitImGui(window);
 
     // FPS Stuff
-    double frameTime = 0.0; // Time since the last frame
-    double targetFrameTime = 1.0 / 60.0; // Target time per frame (60 FPS)
-    double updateInterval = 0.5; // Interval for updating particles (0.5 seconds)
-    double lastUpdateTime = 0.0; // Last time particles were updated
-    double lastFPSUpdateTime = 0.0; // Last time the framerate was updated
+    const double targetFPS = 60.0; // Set a fixed target FPS of 60
+    double targetFrameTime = 1.0 / targetFPS; // Target time per frame (60 FPS)
 
-    const double targetFPS = 60.0;
-    const std::chrono::duration<double> targetFrameDuration = std::chrono::duration<double>(1.0 / targetFPS);
-
-    std::chrono::steady_clock::time_point prevTime = std::chrono::steady_clock::now();
-
-    const double timeStep = 1.0 / targetFPS; // Time step for updates
-    double accumulator = 0.0; // Accumulates elapsed time
-
+    auto lastFrameTime = std::chrono::steady_clock::now();
+    double frameTimeAccumulator = 0.0;
     double currentFramerate = 0.0;
-    double lastUIUpdateTime = 0.0;
+    int frameCount = 0;
+    double lastFPSUpdateTime = glfwGetTime();
 
     while (!glfwWindowShouldClose(window)) {
-        double currentTime = glfwGetTime();
-        frameTime = currentTime - lastUpdateTime;
-
-        std::chrono::steady_clock::time_point currentTimeForDelta = std::chrono::steady_clock::now();
-        std::chrono::duration<double> elapsedTime = currentTimeForDelta - prevTime;
-        prevTime = currentTimeForDelta;
-
-        accumulator += frameTime;
-
-        if (elapsedTime > std::chrono::seconds(1)) {
-            elapsedTime = std::chrono::duration<double>(1.0 / targetFPS);
-        }
-
+        auto currentFrameTime = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsedTime = currentFrameTime - lastFrameTime;
         double deltaTime = elapsedTime.count();
 
+        // Update game state
         glfwPollEvents();
-
         RenderImGui(currentFramerate);
 
-        while (accumulator >= timeStep) {
-            std::vector<std::future<void>> futures;
-            std::lock_guard<std::mutex> lock(particleListLock);
+        // Update particles
+        std::vector<std::future<void>> futures;
+        std::lock_guard<std::mutex> lock(particleListLock);
 
-            for (auto& batch : particleBatchList) {
-                ParticleBatch& batchDef = *batch;
-
-                futures.push_back(std::async(std::launch::async, [&batchDef, timeStep]() {
-                    batchDef.updateParticles(timeStep);
-                    }));
-            }
-
-            futures.push_back(std::async(std::launch::async, DrawElements));
-
-            for (auto& future : futures) {
-                future.wait();
-            }
-            accumulator -= timeStep;
+        for (auto& batch : particleBatchList) {
+            ParticleBatch& batchDef = *batch;
+            futures.push_back(std::async(std::launch::async, [&batchDef, deltaTime]() {
+                batchDef.updateParticles(deltaTime);
+                }));
         }
 
-        if (frameTime >= targetFrameTime) {
-            lastUpdateTime = currentTime;
+        for (auto& future : futures) {
+            future.wait();
         }
 
-        if (currentTime - lastFPSUpdateTime >= updateInterval) {
-            currentFramerate = 1.0 / frameTime;
-            lastFPSUpdateTime = currentTime;
-        }
-
+        // Rendering
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -859,17 +905,29 @@ int main() {
         glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
         glfwSwapBuffers(window);
 
-        // Calculate the time it took to render this frame
-        double frameEndTime = glfwGetTime();
-        double frameDuration = frameEndTime - currentTime;
+        // Frame rate control
+        auto endFrameTime = std::chrono::steady_clock::now();
+        std::chrono::duration<double> frameDuration = endFrameTime - currentFrameTime;
 
-        // If the frame took less than the target duration, sleep for the remaining time
-        if (frameDuration < targetFrameDuration.count()) {
-            std::this_thread::sleep_for(std::chrono::duration<double>(targetFrameDuration.count() - frameDuration));
+        frameTimeAccumulator += frameDuration.count();
+        frameCount++;
+        if (glfwGetTime() - lastFPSUpdateTime >= 1.0) {
+            currentFramerate = frameCount / frameTimeAccumulator;
+            frameCount = 0;
+            frameTimeAccumulator = 0.0;
+            lastFPSUpdateTime = glfwGetTime();
         }
+
+        // Correctly calculate and apply the sleep duration
+        double frameDurationInSeconds = frameDuration.count();
+        if (frameDurationInSeconds < targetFrameTime) {
+            double sleepDurationInSeconds = targetFrameTime - frameDurationInSeconds;
+            std::this_thread::sleep_for(std::chrono::duration<double>(sleepDurationInSeconds));
+        }
+
+        lastFrameTime = currentFrameTime;
     }
 
     // Wait for threads to finish (this will never happen in this example, but it's here for completeness)

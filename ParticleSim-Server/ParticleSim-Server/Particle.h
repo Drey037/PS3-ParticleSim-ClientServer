@@ -9,7 +9,7 @@
 
 class Particle {
 private:
-    static const int size = 3;
+    static const int size = 2;
     int x, y; // coordinates
     double preciseX, preciseY; // for lower velocities
     int map_x, map_y;
