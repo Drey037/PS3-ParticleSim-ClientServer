@@ -188,37 +188,22 @@ void receiveMessages() {
                 buffer[bytesReceived] = '\0';
                 std::string receivedData(buffer);
 
-                // Append the received data to a buffer for this client
-                static std::map<int, std::string> clientBuffers;
-                clientBuffers[it->getID()] += receivedData;
-
-                // Attempt to parse the buffered data for this client
+                // Attempt to parse the received data immediately
                 try {
-                    // Process each message in the buffer independently
-                    size_t pos = 0;
-                    while ((pos = clientBuffers[it->getID()].find('\n')) != std::string::npos) {
-                        std::string message = clientBuffers[it->getID()].substr(0, pos);
-                        clientBuffers[it->getID()].erase(0, pos + 1); // Remove processed message from buffer
-
-                        json j = json::parse(message);
-                        if (j.is_object()) {
-                            int x = j["X"];
-                            int y = j["Y"];
-                            std::cout << "ClientID: " << it->getID() << ", X: " << x << ", Y: " << y << std::endl;
-                            sendNewPositionsToAll(it->getID(), x, y);
-                        }
+                    json j = json::parse(receivedData);
+                    if (j.is_object()) {
+                        int x = j["X"];
+                        int y = j["Y"];
+                        std::cout << "ClientID: " << it->getID() << ", X: " << x << ", Y: " << y << std::endl;
+                        sendNewPositionsToAll(it->getID(), x, y);
                     }
                 }
                 catch (json::parse_error& e) {
-                    // If parsing fails, it might be due to incomplete data. Do not clear the buffer.
-                    // Instead, wait for more data to arrive.
                     std::cerr << "JSON parse error: " << e.what() << std::endl;
                 }
                 catch (json::type_error& e) {
                     std::cerr << "JSON type error: " << e.what() << std::endl;
                 }
-
-                ++it; // Increment the iterator only if the client is still connected
             }
             else if (bytesReceived == 0) {
                 // Handle the case where a client connection is closed

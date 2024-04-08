@@ -116,13 +116,15 @@ public class ParticleSystemApp extends JFrame {
                         character.turnChar(false);
                         break;
                 }
+                // Update the character's position locally
                 character.move(dx, dy);
                 particlePanel.repaint(); // Redraw the panel to reflect the character's new position
 
+                // Send the updated position to the server
                 sendThread();
-
             }
         });
+
 
         // Start gamelogic thread
         new Thread(this::gameLoop).start();
@@ -349,27 +351,25 @@ public class ParticleSystemApp extends JFrame {
                 return;
             }
 
-            // Buffer to accumulate messages
-            StringBuilder messageBuffer = new StringBuilder();
-
             // Create a JSON object for the current position
             JSONObject positionObject = new JSONObject();
             positionObject.put("ClientID", character.getId());
             positionObject.put("X", character.getX());
             positionObject.put("Y", character.getY());
 
-            // Append the JSON object to the buffer
-            messageBuffer.append(positionObject.toString());
+            // Convert the JSON object to a string
+            String message = positionObject.toString();
 
-            // Send the buffered message to the server
-            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
-            out.println(messageBuffer.toString());
+            // Send the message to the server
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            out.println(message);
         } catch (IOException e) {
             e.printStackTrace();
         } catch (JSONException e) {
             e.printStackTrace();
         }
     }
+
 
 
 
